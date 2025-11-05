@@ -45,8 +45,20 @@ integration-test: ## Run integration tests (requires SPLITWISE_API_KEY)
 	@echo "Running integration tests against live Splitwise API..."
 	@echo "⚠️  This will create and delete a test group in your Splitwise account"
 	@if [ -f .env ]; then set -o allexport; source .env; set +o allexport; fi && \
-	if [ -z "$$SPLITWISE_API_KEY" ]; then echo "Error: SPLITWISE_API_KEY environment variable not set"; exit 1; fi && \
+	if [ -z "$$SPLITWISE_API_KEY" ] && [ -z "$$SPLITWISE_CONSUMER_KEY" ]; then echo "Error: Either SPLITWISE_API_KEY or SPLITWISE_CONSUMER_KEY/SPLITWISE_CONSUMER_SECRET must be set"; exit 1; fi && \
 	.venv/bin/python -m pytest tests/integration/ -v --tb=short -s
+
+integration-test-docker: ## Run integration tests with Docker Compose (MongoDB + live API)
+	@echo "Starting MongoDB with Docker Compose..."
+	@docker-compose up -d mongo
+	@echo "Waiting for MongoDB to be ready..."
+	@sleep 5
+	@echo "Running integration tests against live Splitwise API with Docker MongoDB..."
+	@if [ -f .env ]; then set -o allexport; source .env; set +o allexport; fi && \
+	if [ -z "$$SPLITWISE_API_KEY" ] && [ -z "$$SPLITWISE_CONSUMER_KEY" ]; then echo "Error: Either SPLITWISE_API_KEY or SPLITWISE_CONSUMER_KEY/SPLITWISE_CONSUMER_SECRET must be set"; exit 1; fi && \
+	MONGO_URI=mongodb://localhost:27017 .venv/bin/python -m pytest tests/integration/ -v --tb=short -s
+	@echo "Stopping Docker Compose services..."
+	@docker-compose down
 
 test-all-local: ## Run unit tests and integration tests
 	$(MAKE) unit-test

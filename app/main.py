@@ -55,7 +55,6 @@ def get_client(request: Request) -> SplitwiseClient:
 
 @app.post(
     "/mcp/{method_name}",
-    response_model=dict[str, Any],
     responses={
         404: {"description": "Method not found"},
         400: {"description": "Bad request"},

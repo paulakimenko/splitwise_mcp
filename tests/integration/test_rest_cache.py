@@ -11,8 +11,7 @@ from fastapi.testclient import TestClient
 class TestRESTCacheIntegration:
     """Test REST cache endpoints after MCP operations."""
 
-    @pytest.mark.asyncio
-    async def test_cache_workflow(self, test_client: TestClient):
+    def test_cache_workflow(self, test_client: TestClient):
         """Test the complete workflow: MCP call -> cache -> REST endpoint."""
 
         # Step 1: Make MCP call to populate cache
@@ -28,8 +27,7 @@ class TestRESTCacheIntegration:
         cache_data = cache_response.json()
         assert cache_data == mcp_data
 
-    @pytest.mark.asyncio
-    async def test_expenses_cache_workflow(self, test_client: TestClient):
+    def test_expenses_cache_workflow(self, test_client: TestClient):
         """Test expenses cache workflow."""
 
         # Make MCP call to populate expenses cache
@@ -45,12 +43,11 @@ class TestRESTCacheIntegration:
         cache_data = cache_response.json()
         assert cache_data == mcp_data
 
-    @pytest.mark.asyncio
-    async def test_friends_cache_workflow(self, test_client: TestClient):
+    def test_friends_cache_workflow(self, test_client: TestClient):
         """Test friends cache workflow."""
 
         # Make MCP call to populate friends cache
-        mcp_response = test_client.post("/mcp/get_friends", json={})
+        mcp_response = test_client.post("/mcp/list_friends", json={})
         assert mcp_response.status_code == 200
 
         # Check cached friends endpoint
@@ -62,8 +59,7 @@ class TestRESTCacheIntegration:
         cache_data = cache_response.json()
         assert cache_data == mcp_data
 
-    @pytest.mark.asyncio
-    async def test_logs_endpoint(self, test_client: TestClient):
+    def test_logs_endpoint(self, test_client: TestClient):
         """Test that operations are properly logged."""
 
         # Make some MCP calls to generate logs
