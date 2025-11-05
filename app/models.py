@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class MCPCallRequest(BaseModel):
@@ -23,8 +23,9 @@ class AddExpenseEqualSplitRequest(BaseModel):
     participant_name: str = Field(..., description="Name of the other participant")
     description: str = Field(..., description="Expense description")
 
-    @validator("currency_code")
-    def currency_upper(cls, v: str) -> str:  # noqa: N805
+    @field_validator("currency_code")
+    @classmethod
+    def currency_upper(cls, v: str) -> str:
         return v.upper()
 
 

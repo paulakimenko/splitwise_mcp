@@ -123,7 +123,6 @@ async def call_mcp_method(
 @app.get(
     "/groups",
     summary="Return the latest cached list of groups",
-    response_model=Dict[str, Any] | GenericResponse,
 )
 async def get_groups() -> Any:
     doc = find_latest("list_groups")
@@ -135,7 +134,6 @@ async def get_groups() -> Any:
 @app.get(
     "/expenses",
     summary="Return the latest cached list of expenses",
-    response_model=Dict[str, Any] | GenericResponse,
 )
 async def get_expenses() -> Any:
     doc = find_latest("list_expenses")
@@ -147,7 +145,6 @@ async def get_expenses() -> Any:
 @app.get(
     "/friends",
     summary="Return the latest cached list of friends",
-    response_model=Dict[str, Any] | GenericResponse,
 )
 async def get_friends() -> Any:
     doc = find_latest("list_friends")
@@ -233,7 +230,7 @@ async def custom_add_expense_equal(
             raise ValueError("Could not determine current user ID")
         # Import classes from splitwise SDK lazily
         from splitwise.expense import Expense  # type: ignore
-        from splitwise.expense_user import ExpenseUser  # type: ignore
+        from splitwise.expense import ExpenseUser  # type: ignore
         expense = Expense()
         expense.setCost(str(payload.amount))
         expense.setDescription(payload.description)
@@ -260,7 +257,7 @@ async def custom_add_expense_equal(
     log_operation(
         endpoint="/custom/add_expense_equal_split",
         method="POST",
-        params=payload.dict(),
+        params=payload.model_dump(),
         response=response_data,
     )
     return response_data
