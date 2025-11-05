@@ -1,0 +1,28 @@
+version: '3.8'
+services:
+  mongo:
+    image: mongo:6.0
+    container_name: splitwise_mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  splitwise-mcp:
+    build: .
+    container_name: splitwise_mcp_app
+    depends_on:
+      - mongo
+    environment:
+      - SPLITWISE_API_KEY=${SPLITWISE_API_KEY}
+      - MONGO_URI=mongodb://mongo:27017
+      - DB_NAME=${DB_NAME:-splitwise}
+      - BASE_URL=${BASE_URL:-http://localhost:8000}
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app:ro
+
+volumes:
+  mongo_data:
