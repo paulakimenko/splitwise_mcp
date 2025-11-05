@@ -130,10 +130,10 @@ class TestRESTEndpoints:
 
     def test_get_logs_success(self, test_client):
         """Test logs endpoint."""
-        with patch("app.db.get_db") as mock_get_db:
+        with patch("app.main.get_db") as mock_get_db:
             mock_db = MagicMock()
-            mock_collection = Mock()
-            mock_cursor = Mock()
+            mock_collection = MagicMock()
+            mock_cursor = MagicMock()
 
             # Setup the chain: db["logs"].find().sort().limit()
             mock_db.__getitem__.return_value = mock_collection
@@ -151,6 +151,41 @@ class TestRESTEndpoints:
             logs = response.json()
             assert len(logs) == 1
             assert logs[0]["_id"] == "507f1f77bcf86cd799439011"
+
+    def test_health_check_database_connected(self, test_client):
+        """Test health endpoint with database connected."""
+        with patch("app.main.get_db") as mock_get_db:
+            mock_db = MagicMock()
+            mock_client = MagicMock()
+            mock_admin = MagicMock()
+
+            # Setup the chain: db.client.admin.command('ping')
+            mock_db.client = mock_client
+            mock_client.admin = mock_admin
+            mock_admin.command.return_value = {"ok": 1}
+
+            mock_get_db.return_value = mock_db
+
+            response = test_client.get("/health")
+
+            assert response.status_code == 200
+            result = response.json()
+            assert result["status"] == "healthy"
+            assert result["service"] == "splitwise-mcp"
+            assert result["database"] == "connected"
+
+    def test_health_check_database_disconnected(self, test_client):
+        """Test health endpoint with database disconnected."""
+        with patch("app.main.get_db") as mock_get_db:
+            mock_get_db.side_effect = Exception("Connection refused")
+
+            response = test_client.get("/health")
+
+            assert response.status_code == 200
+            result = response.json()
+            assert result["status"] == "degraded"
+            assert result["service"] == "splitwise-mcp"
+            assert "disconnected: Connection refused" in result["database"]
 
 
 class TestCustomEndpoints:

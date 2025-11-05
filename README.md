@@ -147,7 +147,36 @@ Traditional HTTP endpoints remain available for direct integration:
 - `GET /expenses` - Cached expenses data  
 - `GET /friends` - Cached friends data
 - `GET /logs` - Operation audit logs
+- `GET /health` - Service health with database connectivity status
 - `GET /custom/*` - Helper endpoints (see Custom Usage Examples below)
+
+### Health Monitoring
+
+The `/health` endpoint provides comprehensive service status information:
+
+**With Database Connected:**
+```json
+{
+  "status": "healthy",
+  "service": "splitwise-mcp",
+  "database": "connected"
+}
+```
+
+**Without Database:**
+```json
+{
+  "status": "degraded",
+  "service": "splitwise-mcp", 
+  "database": "disconnected: connection error details"
+}
+```
+
+This endpoint is ideal for:
+- Container orchestration health checks
+- Load balancer health monitoring  
+- Service discovery and monitoring systems
+- Determining if the service can handle MCP operations (requires database)
 
 ## Deployment
 
@@ -158,18 +187,51 @@ compose file directly on a cloud server or build/push the Docker
 image to your registry and use a managed environment such as
 EasyPanel.
 
-**Basic flow for deployment:**
+### Using Pre-built Docker Image
 
-1. Build and push your image:
+The service is available as a pre-built Docker image on Docker Hub:
+
+```bash
+# Pull and run the latest image
+docker run -p 8000:8000 --env-file .env paulakimenko/splitwise-mcp:latest
+
+# Or use docker-compose
+docker-compose up -d
+```
+
+**Available Docker Image:**
+- **Registry**: `paulakimenko/splitwise-mcp:latest`
+- **Base**: Python 3.11 slim
+- **Exposed Port**: 8000 (both REST API and MCP server)
+- **Health Check**: GET `/health` endpoint with database status
+
+### Custom Deployment Workflow
+
+1. **Using Makefile (Recommended):**
+
+   ```bash
+   # Configure your Docker registry in .env
+   echo "DOCKER_REGISTRY=your_dockerhub_username" >> .env
+   echo "DOCKER_IMAGE_NAME=splitwise-mcp" >> .env
+   
+   # Build and push image
+   make docker-build-push
+   
+   # Or build and push separately
+   make docker-build
+   make docker-push
+   ```
+
+2. **Manual Docker Commands:**
 
    ```bash
    docker build -t your-dockerhub-user/splitwise-mcp:latest .
    docker push your-dockerhub-user/splitwise-mcp:latest
    ```
 
-2. Configure your Hetzner/EasyPanel service:
+3. **Configure your deployment service:**
 
-   * Set the container image to `your-dockerhub-user/splitwise-mcp:latest`.
+   * Set the container image to `paulakimenko/splitwise-mcp:latest` or your custom image.
    * Add environment variables:
      - `SPLITWISE_API_KEY` (required) - Your Splitwise API key
      - `MONGO_URI` (optional) - MongoDB connection string (defaults to `mongodb://localhost:27017`)
@@ -250,9 +312,13 @@ make format                # Format code
 make check                 # Run all quality checks
 
 # Docker
-make docker-compose-up     # Start services
-make docker-compose-down   # Stop services
-make docker-dev           # Start dev environment
+make docker-build         # Build Docker image
+make docker-push          # Push Docker image to registry
+make docker-build-push    # Build and push Docker image
+make docker-run           # Run Docker container locally
+make docker-compose-up    # Start services
+make docker-compose-down  # Stop services
+make docker-dev          # Start dev environment
 
 # CI/CD
 make ci                   # Full CI pipeline (unit tests)

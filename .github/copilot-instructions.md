@@ -91,9 +91,13 @@ make format                # Format code with Ruff
 make check                 # Run all quality checks
 
 # Docker operations
-make docker-compose-up     # Start services
-make docker-compose-down   # Stop services
-make docker-dev           # Start dev environment
+make docker-build         # Build Docker image
+make docker-push          # Push image to registry
+make docker-build-push    # Build and push image
+make docker-run           # Run container locally
+make docker-compose-up    # Start services
+make docker-compose-down  # Stop services
+make docker-dev          # Start dev environment
 
 # CI simulation
 make ci                   # Full CI pipeline (unit tests)
@@ -172,9 +176,12 @@ docker-compose up --build
 - All MCP operations maintain database persistence and audit logging
 
 ### Docker Deployment
-- Multi-stage build with system dependencies for `pymongo` compilation
-- Service discovery via container names (`mongo:27017`)
-- Volume mount for development (`./:/app:ro`)
+- **Pre-built Image**: `paulakimenko/splitwise-mcp:latest` available on Docker Hub
+- **Build Process**: Multi-stage build with system dependencies for `pymongo` compilation
+- **Registry Configuration**: Set `DOCKER_REGISTRY`, `DOCKER_IMAGE_NAME`, `DOCKER_TAG` in `.env`
+- **Service Discovery**: Container names (`mongo:27017`) for docker-compose
+- **Development**: Volume mount for development (`./:/app:ro`)
+- **Makefile Commands**: `make docker-build`, `make docker-push`, `make docker-build-push`
 
 ## Testing & Debugging
 
@@ -216,7 +223,7 @@ Integration tests create a temporary test group in your Splitwise account:
 ### Development Tools
 - **API Documentation**: `http://localhost:8000/docs` (Swagger UI)
 - **Logs Endpoint**: `GET /logs` returns recent operation audit trail
-- **Health Check**: Any REST endpoint will verify MongoDB connectivity
+- **Health Check**: `GET /health` returns service status with database connectivity details
 - **Error Patterns**: 404 for unmapped methods, 400 for SDK errors, 500 for internal errors
 
 ### CI/CD Pipeline
