@@ -47,10 +47,10 @@ class SplitwiseClient:
         api_key = api_key or os.environ.get("SPLITWISE_API_KEY")
         if not api_key:
             raise ValueError("SPLITWISE_API_KEY environment variable not set")
-        # The Splitwise SDK accepts a personal access token directly
-        # (without consumer keys) by passing the token as the first
-        # argument.  See https://github.com/namaggarwal/splitwise#using-application-access-token
-        self._client = Splitwise(api_key)
+        # The Splitwise SDK v3.0.0+ requires consumer keys but supports personal access tokens
+        # by using empty consumer keys and passing the token as the api_key parameter.
+        # See https://github.com/namaggarwal/splitwise/issues
+        self._client = Splitwise(consumer_key="", consumer_secret="", api_key=api_key)
 
     @property
     def raw_client(self) -> Splitwise:
@@ -113,7 +113,10 @@ class SplitwiseClient:
         members = getattr(group, "members", []) or getattr(group, "members_list", [])
         for member in members:
             full = f"{getattr(member, 'first_name', '')} {getattr(member, 'last_name', '')}".strip()
-            if participant_name == getattr(member, "first_name", None) or participant_name == full:
+            if (
+                participant_name == getattr(member, "first_name", None)
+                or participant_name == full
+            ):
                 return member
         return None
 

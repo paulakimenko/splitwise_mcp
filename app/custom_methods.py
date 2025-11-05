@@ -66,7 +66,11 @@ async def expenses_by_month(
                 if exp.get("group_id") != group_id:
                     continue
                 # Some expense objects may have `date` or `created_at`
-                date_str = exp.get("date") or exp.get("created_at") or exp.get("created_at_object")
+                date_str = (
+                    exp.get("date")
+                    or exp.get("created_at")
+                    or exp.get("created_at_object")
+                )
                 if not date_str:
                     continue
                 date_obj = date_parser.parse(date_str)
@@ -96,9 +100,7 @@ async def monthly_report(
         return {
             "summary": {},
             "total": 0,
-            "recommendations": [
-                "No expenses found for the given group and month."
-            ],
+            "recommendations": ["No expenses found for the given group and month."],
         }
     category_totals: dict[str, float] = defaultdict(float)
     total_cost = 0.0

@@ -44,7 +44,8 @@ unit-test: ## Run unit tests only
 integration-test: ## Run integration tests (requires SPLITWISE_API_KEY)
 	@echo "Running integration tests against live Splitwise API..."
 	@echo "⚠️  This will create and delete a test group in your Splitwise account"
-	@if [ -z "$$SPLITWISE_API_KEY" ]; then echo "Error: SPLITWISE_API_KEY environment variable not set"; exit 1; fi
+	@if [ -f .env ]; then set -o allexport; source .env; set +o allexport; fi && \
+	if [ -z "$$SPLITWISE_API_KEY" ]; then echo "Error: SPLITWISE_API_KEY environment variable not set"; exit 1; fi && \
 	.venv/bin/python -m pytest tests/integration/ -v --tb=short -s
 
 test-all-local: ## Run unit tests and integration tests

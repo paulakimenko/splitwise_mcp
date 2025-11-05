@@ -13,22 +13,24 @@ class TestSplitwiseClientInit:
 
     def test_init_with_api_key(self):
         """Test initialization with API key parameter."""
-        with patch('app.splitwise_client.Splitwise') as mock_splitwise:
+        with patch("app.splitwise_client.Splitwise") as mock_splitwise:
             client = SplitwiseClient(api_key="test_key")
-            mock_splitwise.assert_called_once_with("test_key")
+            mock_splitwise.assert_called_once_with(consumer_key="", consumer_secret="", api_key="test_key")
             assert client.raw_client == mock_splitwise.return_value
 
     def test_init_with_env_var(self):
         """Test initialization with environment variable."""
-        with patch('app.splitwise_client.Splitwise') as mock_splitwise:
-            with patch.dict(os.environ, {'SPLITWISE_API_KEY': 'env_key'}):
+        with patch("app.splitwise_client.Splitwise") as mock_splitwise:
+            with patch.dict(os.environ, {"SPLITWISE_API_KEY": "env_key"}):
                 client = SplitwiseClient()
-                mock_splitwise.assert_called_once_with("env_key")
+                mock_splitwise.assert_called_once_with(consumer_key="", consumer_secret="", api_key="env_key")
 
     def test_init_without_api_key(self):
         """Test initialization fails without API key."""
         with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError, match="SPLITWISE_API_KEY environment variable not set"):
+            with pytest.raises(
+                ValueError, match="SPLITWISE_API_KEY environment variable not set"
+            ):
                 SplitwiseClient()
 
 
@@ -46,7 +48,10 @@ class TestMethodMapping:
 
     def test_call_mapped_method_with_kwargs(self, mock_splitwise_client):
         """Test calling mapped method with arguments."""
-        mock_splitwise_client._client.getGroup.return_value = {"id": 1, "name": "Test Group"}
+        mock_splitwise_client._client.getGroup.return_value = {
+            "id": 1,
+            "name": "Test Group",
+        }
 
         result = mock_splitwise_client.call_mapped_method("get_group", id=1)
 
@@ -63,7 +68,9 @@ class TestMethodMapping:
         # Remove the method from the mock
         del mock_splitwise_client._client.getGroups
 
-        with pytest.raises(AttributeError, match="Splitwise SDK has no method 'getGroups'"):
+        with pytest.raises(
+            AttributeError, match="Splitwise SDK has no method 'getGroups'"
+        ):
             mock_splitwise_client.call_mapped_method("list_groups")
 
 
@@ -105,7 +112,10 @@ class TestHelperMethods:
         mock_group2 = Mock()
         mock_group2.name = "Test Group"
 
-        mock_splitwise_client._client.getGroups.return_value = [mock_group1, mock_group2]
+        mock_splitwise_client._client.getGroups.return_value = [
+            mock_group1,
+            mock_group2,
+        ]
 
         result = mock_splitwise_client.get_group_by_name("Test Group")
 
@@ -180,7 +190,7 @@ class TestHelperMethods:
 
         assert result == mock_member
 
-    @patch('app.splitwise_client.object_to_dict')
+    @patch("app.splitwise_client.object_to_dict")
     def test_convert(self, mock_object_to_dict, mock_splitwise_client):
         """Test object conversion."""
         test_obj = {"test": "data"}

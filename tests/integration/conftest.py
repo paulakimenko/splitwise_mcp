@@ -2,7 +2,7 @@
 
 import asyncio
 import os
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import pytest
 from fastapi.testclient import TestClient
@@ -35,15 +35,20 @@ def splitwise_client(splitwise_api_key: str) -> SplitwiseClient:
 
 
 @pytest.fixture(scope="session")
-def test_client() -> TestClient:
-    """Create a test client for the FastAPI app."""
-    return TestClient(app)
+def test_client(splitwise_client: SplitwiseClient):
+    """Create a test client for the FastAPI app with proper state setup."""
+    # Create test client with lifespan events disabled to avoid startup issues
+    with TestClient(app) as client:
+        # Manually set the client in app state since lifespan won't run in test mode
+        app.state.client = splitwise_client
+        yield client
 
 
 @pytest.fixture(scope="session")
 async def test_group_name() -> str:
     """Generate a unique test group name."""
     import time
+
     timestamp = int(time.time())
     return f"MCP_Test_Group_{timestamp}"
 
@@ -56,27 +61,25 @@ async def test_group_id(
     try:
         # Create test group
         from splitwise.group import Group
-        
+
         group = Group()
         group.setName(test_group_name)
         group.setType("apartment")  # Use apartment type for test group
-        
+
         # Create the group via Splitwise API
         created_group = await asyncio.to_thread(
             splitwise_client.raw_client.createGroup, group
         )
-        
+
         group_id = created_group.id
         print(f"Created test group '{test_group_name}' with ID: {group_id}")
-        
+
         yield group_id
-        
+
     finally:
         # Cleanup: Delete the test group
         try:
-            await asyncio.to_thread(
-                splitwise_client.raw_client.deleteGroup, group_id
-            )
+            await asyncio.to_thread(splitwise_client.raw_client.deleteGroup, group_id)
             print(f"Cleaned up test group '{test_group_name}' (ID: {group_id})")
         except Exception as e:
             print(f"Warning: Failed to delete test group {group_id}: {e}")

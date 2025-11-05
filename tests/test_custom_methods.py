@@ -28,25 +28,25 @@ class TestExpensesByMonth:
                 "group_id": 1,
                 "date": "2025-10-15T10:00:00Z",
                 "cost": "100.0",
-                "description": "Groceries"
+                "description": "Groceries",
             },
             {
                 "id": 2,
                 "group_id": 1,
                 "date": "2025-09-15T10:00:00Z",  # Different month
                 "cost": "50.0",
-                "description": "Gas"
+                "description": "Gas",
             },
             {
                 "id": 3,
                 "group_id": 2,  # Different group
                 "date": "2025-10-20T10:00:00Z",
                 "cost": "75.0",
-                "description": "Dinner"
-            }
+                "description": "Dinner",
+            },
         ]
 
-        with patch('app.custom_methods.find_all') as mock_find_all:
+        with patch("app.custom_methods.find_all") as mock_find_all:
             mock_find_all.return_value = [{"response": expenses_data}]
 
             result = await expenses_by_month(mock_client, "Test Group", "2025-10")
@@ -84,7 +84,7 @@ class TestExpensesByMonth:
         mock_client = Mock()
         mock_client.get_group_by_name.return_value = mock_group
 
-        with patch('app.custom_methods.find_all') as mock_find_all:
+        with patch("app.custom_methods.find_all") as mock_find_all:
             mock_find_all.return_value = []
 
             result = await expenses_by_month(mock_client, "Test Group", "2025-10")
@@ -104,17 +104,17 @@ class TestExpensesByMonth:
                 "id": 1,
                 "group_id": 1,
                 "date": "2025-10-15T10:00:00Z",  # Use date field for consistency
-                "cost": "100.0"
+                "cost": "100.0",
             },
             {
                 "id": 2,
                 "group_id": 1,
                 "created_at": "2025-10-20T10:00:00Z",  # Using created_at
-                "cost": "50.0"
-            }
+                "cost": "50.0",
+            },
         ]
 
-        with patch('app.custom_methods.find_all') as mock_find_all:
+        with patch("app.custom_methods.find_all") as mock_find_all:
             mock_find_all.return_value = [{"response": expenses_data}]
 
             result = await expenses_by_month(mock_client, "Test Group", "2025-10")
@@ -129,23 +129,19 @@ class TestMonthlyReport:
     async def test_monthly_report_success(self, mock_splitwise_client):
         """Test successful monthly report generation."""
         # Mock expenses_by_month to return test data
-        with patch('app.custom_methods.expenses_by_month') as mock_expenses_by_month:
+        with patch("app.custom_methods.expenses_by_month") as mock_expenses_by_month:
             mock_expenses_by_month.return_value = [
-                {
-                    "cost": "100.0",
-                    "category": {"name": "Food"}
-                },
-                {
-                    "cost": "50.0",
-                    "category": {"name": "Transportation"}
-                },
+                {"cost": "100.0", "category": {"name": "Food"}},
+                {"cost": "50.0", "category": {"name": "Transportation"}},
                 {
                     "cost": "200.0",
-                    "category": {"name": "Food"}  # Same category
-                }
+                    "category": {"name": "Food"},  # Same category
+                },
             ]
 
-            result = await monthly_report(mock_splitwise_client, "Test Group", "2025-10")
+            result = await monthly_report(
+                mock_splitwise_client, "Test Group", "2025-10"
+            )
 
             assert result["total"] == 350.0
             assert result["summary"]["Food"] == 300.0
@@ -157,10 +153,12 @@ class TestMonthlyReport:
     @pytest.mark.asyncio
     async def test_monthly_report_no_expenses(self, mock_splitwise_client):
         """Test monthly report with no expenses."""
-        with patch('app.custom_methods.expenses_by_month') as mock_expenses_by_month:
+        with patch("app.custom_methods.expenses_by_month") as mock_expenses_by_month:
             mock_expenses_by_month.return_value = []
 
-            result = await monthly_report(mock_splitwise_client, "Test Group", "2025-10")
+            result = await monthly_report(
+                mock_splitwise_client, "Test Group", "2025-10"
+            )
 
             assert result["total"] == 0
             assert result["summary"] == {}
@@ -170,27 +168,29 @@ class TestMonthlyReport:
     @pytest.mark.asyncio
     async def test_monthly_report_various_category_formats(self, mock_splitwise_client):
         """Test handling different category formats."""
-        with patch('app.custom_methods.expenses_by_month') as mock_expenses_by_month:
+        with patch("app.custom_methods.expenses_by_month") as mock_expenses_by_month:
             mock_expenses_by_month.return_value = [
                 {
                     "cost": "100.0",
-                    "category": {"name": "Food"}  # Dict with name
+                    "category": {"name": "Food"},  # Dict with name
                 },
                 {
                     "cost": "50.0",
-                    "category": "Transportation"  # String
+                    "category": "Transportation",  # String
                 },
                 {
                     "cost": "75.0",
-                    "category_id": 123  # Numeric category_id
+                    "category_id": 123,  # Numeric category_id
                 },
                 {
                     "cost": "25.0",
                     # No category info
-                }
+                },
             ]
 
-            result = await monthly_report(mock_splitwise_client, "Test Group", "2025-10")
+            result = await monthly_report(
+                mock_splitwise_client, "Test Group", "2025-10"
+            )
 
             assert result["summary"]["Food"] == 100.0
             assert result["summary"]["Transportation"] == 50.0
@@ -200,23 +200,22 @@ class TestMonthlyReport:
     @pytest.mark.asyncio
     async def test_monthly_report_invalid_cost_handling(self, mock_splitwise_client):
         """Test handling invalid cost values."""
-        with patch('app.custom_methods.expenses_by_month') as mock_expenses_by_month:
+        with patch("app.custom_methods.expenses_by_month") as mock_expenses_by_month:
             mock_expenses_by_month.return_value = [
-                {
-                    "cost": "100.0",
-                    "category": {"name": "Food"}
-                },
+                {"cost": "100.0", "category": {"name": "Food"}},
                 {
                     "cost": "invalid",  # Invalid cost
-                    "category": {"name": "Transportation"}
+                    "category": {"name": "Transportation"},
                 },
                 {
                     "amount": "50.0",  # Using 'amount' instead of 'cost'
-                    "category": {"name": "Entertainment"}
-                }
+                    "category": {"name": "Entertainment"},
+                },
             ]
 
-            result = await monthly_report(mock_splitwise_client, "Test Group", "2025-10")
+            result = await monthly_report(
+                mock_splitwise_client, "Test Group", "2025-10"
+            )
 
             assert result["summary"]["Food"] == 100.0
             assert result["summary"]["Transportation"] == 0.0  # Invalid cost becomes 0
@@ -226,23 +225,16 @@ class TestMonthlyReport:
     @pytest.mark.asyncio
     async def test_monthly_report_no_high_categories(self, mock_splitwise_client):
         """Test report with no categories exceeding 50%."""
-        with patch('app.custom_methods.expenses_by_month') as mock_expenses_by_month:
+        with patch("app.custom_methods.expenses_by_month") as mock_expenses_by_month:
             mock_expenses_by_month.return_value = [
-                {
-                    "cost": "40.0",
-                    "category": {"name": "Food"}
-                },
-                {
-                    "cost": "30.0",
-                    "category": {"name": "Transportation"}
-                },
-                {
-                    "cost": "30.0",
-                    "category": {"name": "Entertainment"}
-                }
+                {"cost": "40.0", "category": {"name": "Food"}},
+                {"cost": "30.0", "category": {"name": "Transportation"}},
+                {"cost": "30.0", "category": {"name": "Entertainment"}},
             ]
 
-            result = await monthly_report(mock_splitwise_client, "Test Group", "2025-10")
+            result = await monthly_report(
+                mock_splitwise_client, "Test Group", "2025-10"
+            )
 
             assert result["total"] == 100.0
             assert len(result["recommendations"]) == 0  # No category exceeds 50%

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Request, status
@@ -22,7 +23,20 @@ from .models import (
 from .splitwise_client import SplitwiseClient
 from .utils import object_to_dict
 
-app = FastAPI(title="Splitwise MCP Service", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager."""
+    # Startup
+    api_key = os.environ.get("SPLITWISE_API_KEY")
+    if not api_key:
+        raise RuntimeError("SPLITWISE_API_KEY must be set in the environment")
+    app.state.client = SplitwiseClient(api_key=api_key)
+    yield
+    # Shutdown (if needed)
+
+
+app = FastAPI(title="Splitwise MCP Service", version="0.1.0", lifespan=lifespan)
 
 # Allow all CORS origins for ease of testing; adjust as needed
 app.add_middleware(
@@ -37,17 +51,6 @@ app.add_middleware(
 def get_client(request: Request) -> SplitwiseClient:
     """Dependency to obtain a SplitwiseClient instance stored in app state."""
     return request.app.state.client
-
-
-@app.on_event("startup")
-def startup_event() -> None:
-    """Initialise the Splitwise client when the application starts."""
-    api_key = os.environ.get("SPLITWISE_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "SPLITWISE_API_KEY must be set in the environment"
-        )
-    app.state.client = SplitwiseClient(api_key=api_key)
 
 
 @app.post(
@@ -76,9 +79,7 @@ async def call_mcp_method(
     args = body.args if body else {}
     try:
         # Because the Splitwise SDK is synchronous, run in thread
-        result = await asyncio.to_thread(
-            client.call_mapped_method, method_name, **args
-        )
+        result = await asyncio.to_thread(client.call_mapped_method, method_name, **args)
     except AttributeError as exc:
         log_operation(
             endpoint=f"/mcp/{method_name}",
@@ -118,6 +119,7 @@ async def call_mcp_method(
 
 
 # REST endpoints for cached data
+
 
 @app.get(
     "/groups",
@@ -170,6 +172,7 @@ async def get_logs() -> Any:
 
 # Custom helper endpoints
 
+
 @app.get(
     "/custom/expenses_by_month",
     summary="List expenses for a group during a given month",
@@ -189,9 +192,7 @@ async def custom_expenses_by_month(
     "/custom/monthly_report",
     summary="Generate a category report for a group and month",
 )
-async def custom_monthly_report(
-    request: Request, group_name: str, month: str
-) -> Any:
+async def custom_monthly_report(request: Request, group_name: str, month: str) -> Any:
     client: SplitwiseClient = request.app.state.client
     try:
         result = await custom_methods.monthly_report(client, group_name, month)
@@ -232,6 +233,7 @@ async def custom_add_expense_equal(
             Expense,  # type: ignore
             ExpenseUser,  # type: ignore
         )
+
         expense = Expense()
         expense.setCost(str(payload.amount))
         expense.setDescription(payload.description)
