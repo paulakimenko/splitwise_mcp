@@ -37,7 +37,7 @@ class TestSplitwiseClientInit:
             patch("app.splitwise_client.Splitwise") as mock_splitwise,
             patch.dict(os.environ, {"SPLITWISE_API_KEY": "env_key"}),
         ):
-            client = SplitwiseClient()
+            SplitwiseClient()
             mock_splitwise.assert_called_once_with(
                 consumer_key="", consumer_secret="", api_key="env_key"
             )
