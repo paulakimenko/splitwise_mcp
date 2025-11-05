@@ -4,7 +4,6 @@ These tests validate the custom business logic endpoints work correctly
 with real Splitwise data and our test group.
 """
 
-import pytest
 from fastapi.testclient import TestClient
 
 
