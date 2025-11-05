@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 class MCPCallRequest(BaseModel):
     """Request schema for dynamic MCP method calls."""
 
-    args: Dict[str, Any] = Field(
+    args: dict[str, Any] = Field(
         default_factory=dict,
         description="Arguments to pass to the underlying Splitwise SDK method",
     )
@@ -36,4 +36,4 @@ class MonthlyReportRequest(BaseModel):
 
 class GenericResponse(BaseModel):
     message: str
-    data: Optional[Any] = None
+    data: Any | None = None

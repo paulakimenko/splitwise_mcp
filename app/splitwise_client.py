@@ -10,7 +10,7 @@ method names.  See the README for details.
 from __future__ import annotations
 
 import os
-from typing import Any, Dict
+from typing import Any
 
 from splitwise import Splitwise  # type: ignore
 
@@ -28,7 +28,7 @@ class SplitwiseClient:
 
     # Mapping from external MCP method names (snake_case) to
     # Splitwise SDK method names (camelCase).
-    METHOD_MAP: Dict[str, str] = {
+    METHOD_MAP: dict[str, str] = {
         "get_current_user": "getCurrentUser",
         "list_groups": "getGroups",
         "get_group": "getGroup",
@@ -88,7 +88,7 @@ class SplitwiseClient:
         me = self._client.getCurrentUser()
         # Attempt to extract ID from returned object
         if hasattr(me, "id"):
-            return getattr(me, "id")
+            return me.id
         if isinstance(me, dict):
             return me.get("id")
         return None

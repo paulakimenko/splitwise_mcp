@@ -16,18 +16,20 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import TYPE_CHECKING, Any
 
 from dateutil import parser as date_parser  # type: ignore
 
 from .db import find_all, insert_document
 from .utils import month_range
-from .splitwise_client import SplitwiseClient
+
+if TYPE_CHECKING:
+    from .splitwise_client import SplitwiseClient
 
 
 async def expenses_by_month(
     client: SplitwiseClient, group_name: str, month: str
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Return expenses from a group for the specified month (YYYY-MM).
 
     This helper does not call the Splitwise API directly – it reads
@@ -41,12 +43,20 @@ async def expenses_by_month(
     group = client.get_group_by_name(group_name)
     if not group:
         raise ValueError(f"Group '{group_name}' not found")
-    group_id = getattr(group, "id", None)
+
+    # Handle both object attributes and dict-like access
+    if hasattr(group, "id"):
+        group_id = group.id
+    elif isinstance(group, dict):
+        group_id = group.get("id")
+    else:
+        group_id = getattr(group, "id", None)
+
     if group_id is None:
         raise ValueError(f"Group '{group_name}' does not have an ID")
     # Fetch all cached expense lists
     docs = find_all("list_expenses")
-    results: List[Dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
     for doc in docs:
         expenses = doc.get("response") or doc.get("data")
         if not expenses:
@@ -60,6 +70,9 @@ async def expenses_by_month(
                 if not date_str:
                     continue
                 date_obj = date_parser.parse(date_str)
+                # Convert to naive datetime for comparison if timezone-aware
+                if date_obj.tzinfo is not None:
+                    date_obj = date_obj.replace(tzinfo=None)
                 if start <= date_obj < end:
                     results.append(exp)
             except Exception:
@@ -69,7 +82,7 @@ async def expenses_by_month(
 
 async def monthly_report(
     client: SplitwiseClient, group_name: str, month: str
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Generate a simple report of expenses by category for a month.
 
     This report reads cached expenses from the database, groups them
@@ -87,7 +100,7 @@ async def monthly_report(
                 "No expenses found for the given group and month."
             ],
         }
-    category_totals: Dict[str, float] = defaultdict(float)
+    category_totals: dict[str, float] = defaultdict(float)
     total_cost = 0.0
     for exp in expenses:
         # Cost may be string; convert to float if possible
@@ -109,7 +122,7 @@ async def monthly_report(
         cat_name = cat_name or "Unknown"
         category_totals[cat_name] += cost
     # Build recommendations: mark categories exceeding 50% of total
-    recommendations: List[str] = []
+    recommendations: list[str] = []
     for cat_name, cost in category_totals.items():
         if total_cost > 0 and cost / total_cost > 0.5:
             recommendations.append(

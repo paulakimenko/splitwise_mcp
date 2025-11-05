@@ -10,10 +10,9 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 from pymongo import MongoClient
-
 
 _client: MongoClient | None = None
 
@@ -39,7 +38,7 @@ def get_db() -> Any:
     return client[db_name]
 
 
-def insert_document(collection: str, document: Dict[str, Any]) -> Any:
+def insert_document(collection: str, document: dict[str, Any]) -> Any:
     """Insert a document into the specified collection.
 
     Adds a timestamp to the document before insertion.
@@ -51,7 +50,7 @@ def insert_document(collection: str, document: Dict[str, Any]) -> Any:
     return result.inserted_id
 
 
-def find_latest(collection: str) -> Dict[str, Any] | None:
+def find_latest(collection: str) -> dict[str, Any] | None:
     """Return the most recently inserted document from a collection.
 
     This helper is used by REST endpoints to retrieve cached data.
@@ -61,7 +60,7 @@ def find_latest(collection: str) -> Dict[str, Any] | None:
     return db[collection].find_one(sort=[("timestamp", -1)])
 
 
-def find_all(collection: str, filter_query: Dict[str, Any] | None = None) -> list[Dict[str, Any]]:
+def find_all(collection: str, filter_query: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """Return all documents matching the filter from a collection.
 
     If `filter_query` is None, all documents are returned.  Note that

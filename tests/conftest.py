@@ -1,9 +1,10 @@
 """Test configuration and fixtures."""
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch
 import asyncio
-from typing import Any, Dict
+from typing import Any
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 from app.splitwise_client import SplitwiseClient
 
@@ -41,7 +42,7 @@ def mock_db():
     mock_db_client = MagicMock()
     mock_collection = Mock()
     mock_db_client.__getitem__.return_value = mock_collection
-    
+
     with patch('app.db.get_client') as mock_get_client:
         mock_get_client.return_value = Mock()
         with patch('app.db.get_db') as mock_get_db:

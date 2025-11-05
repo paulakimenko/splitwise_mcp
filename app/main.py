@@ -4,24 +4,23 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Request, status
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
+from . import custom_methods
 from .db import find_latest, insert_document
 from .logging_utils import log_operation
 from .models import (
-    MCPCallRequest,
     AddExpenseEqualSplitRequest,
-    MonthlyReportRequest,
     GenericResponse,
+    MCPCallRequest,
+    MonthlyReportRequest,
 )
 from .splitwise_client import SplitwiseClient
 from .utils import object_to_dict
-from . import custom_methods
-
 
 app = FastAPI(title="Splitwise MCP Service", version="0.1.0")
 
@@ -53,7 +52,7 @@ def startup_event() -> None:
 
 @app.post(
     "/mcp/{method_name}",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     responses={
         404: {"description": "Method not found"},
         400: {"description": "Bad request"},
@@ -91,7 +90,7 @@ async def call_mcp_method(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
-        )
+        ) from exc
     except Exception as exc:
         log_operation(
             endpoint=f"/mcp/{method_name}",
@@ -103,7 +102,7 @@ async def call_mcp_method(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
-        )
+        ) from exc
     # Convert complex objects to dicts for storage and response
     response_data = client.convert(result)
     # Persist into database
@@ -182,7 +181,7 @@ async def custom_expenses_by_month(
     try:
         result = await custom_methods.expenses_by_month(client, group_name, month)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return result
 
 
@@ -197,7 +196,7 @@ async def custom_monthly_report(
     try:
         result = await custom_methods.monthly_report(client, group_name, month)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return result
 
 
@@ -229,8 +228,10 @@ async def custom_add_expense_equal(
         if me_id is None:
             raise ValueError("Could not determine current user ID")
         # Import classes from splitwise SDK lazily
-        from splitwise.expense import Expense  # type: ignore
-        from splitwise.expense import ExpenseUser  # type: ignore
+        from splitwise.expense import (
+            Expense,  # type: ignore
+            ExpenseUser,  # type: ignore
+        )
         expense = Expense()
         expense.setCost(str(payload.amount))
         expense.setDescription(payload.description)
@@ -243,14 +244,15 @@ async def custom_add_expense_equal(
         u1.setPaidShare(str(payload.amount))
         u1.setOwedShare(str(half))
         u2 = ExpenseUser()
-        u2.setId(getattr(participant, "id"))
+        u2.setId(participant.id)
         u2.setPaidShare("0.0")
         u2.setOwedShare(str(half))
+
         expense.setUsers([u1, u2])
         # Create the expense
         created = await asyncio.to_thread(client.raw_client.createExpense, expense)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     # Convert result and persist
     response_data = client.convert(created)
     insert_document("custom_add_expense_equal_split", {"response": response_data})

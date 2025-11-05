@@ -8,7 +8,7 @@ error message.  Timestamps are added automatically.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from .db import insert_document
 
@@ -16,9 +16,9 @@ from .db import insert_document
 def log_operation(
     endpoint: str,
     method: str,
-    params: Dict[str, Any] | None,
+    params: dict[str, Any] | None,
     response: Any,
-    error: Optional[str] = None,
+    error: str | None = None,
 ) -> None:
     """Insert a log entry describing an operation.
 
@@ -36,7 +36,7 @@ def log_operation(
     error: str | None
         Optional error message if an exception occurred.
     """
-    log_doc: Dict[str, Any] = {
+    log_doc: dict[str, Any] = {
         "endpoint": endpoint,
         "method": method,
         "params": params,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 
 def object_to_dict(obj: Any) -> Any:
@@ -36,7 +36,7 @@ def object_to_dict(obj: Any) -> Any:
 
     # Objects with __dict__
     if hasattr(obj, "__dict__"):
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
         for attr, value in obj.__dict__.items():
             # Skip private or protected attributes
             if attr.startswith("_"):
@@ -58,8 +58,8 @@ def month_range(month: str) -> tuple[datetime, datetime]:
     """
     try:
         start = datetime.strptime(month, "%Y-%m")
-    except ValueError:
-        raise ValueError("Month must be in 'YYYY-MM' format")
+    except ValueError as exc:
+        raise ValueError("Month must be in 'YYYY-MM' format") from exc
     # Compute end of month by advancing a month
     if start.month == 12:
         end = start.replace(year=start.year + 1, month=1)
