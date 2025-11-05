@@ -7,9 +7,8 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Path, Request, status
+from fastapi import FastAPI, HTTPException, Path, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 from . import custom_methods
 from .db import find_latest, insert_document
@@ -18,10 +17,8 @@ from .models import (
     AddExpenseEqualSplitRequest,
     GenericResponse,
     MCPCallRequest,
-    MonthlyReportRequest,
 )
 from .splitwise_client import SplitwiseClient
-from .utils import object_to_dict
 
 
 @asynccontextmanager
@@ -34,7 +31,9 @@ async def lifespan(app: FastAPI):
     if api_key:
         app.state.client = SplitwiseClient(api_key=api_key)
     elif consumer_key and consumer_secret:
-        app.state.client = SplitwiseClient(consumer_key=consumer_key, consumer_secret=consumer_secret)
+        app.state.client = SplitwiseClient(
+            consumer_key=consumer_key, consumer_secret=consumer_secret
+        )
     else:
         raise RuntimeError(
             "You must set either SPLITWISE_API_KEY or both SPLITWISE_CONSUMER_KEY and SPLITWISE_CONSUMER_SECRET in the environment"

@@ -162,7 +162,7 @@ docker-compose up --build
 ### Test Architecture
 The project includes comprehensive testing at multiple levels:
 
-- **Unit Tests** (`tests/`) - Mock-based testing of all modules (61 tests)
+- **Unit Tests** (`tests/`) - Mock-based testing of all modules (64 tests)
 - **Integration Tests** (`tests/integration/`) - End-to-end tests against live Splitwise API
 - **Test Coverage** - Comprehensive coverage reporting with pytest-cov
 
@@ -204,3 +204,188 @@ Integration tests create a temporary test group in your Splitwise account:
 - **Multi-Python** - Tests against Python 3.11 and 3.12
 - **Docker Build** - Validates container builds
 - **Integration Tests** - Optional integration testing on main branch (requires secrets)
+
+## Code Style & Standards
+
+### Python Style Guidelines
+This project follows strict code style standards enforced by **Ruff** (replacing Black, isort, flake8):
+
+**Key Style Rules:**
+- **Line Length**: 88 characters (Black-compatible)
+- **Quotes**: Double quotes for strings (`"hello"` not `'hello'`)
+- **Indentation**: 4 spaces (no tabs)
+- **Import Organization**: Ruff isort with known first-party (`app`) and third-party packages
+- **Type Annotations**: Python 3.11+ style with `from __future__ import annotations`
+- **Trailing Commas**: Magic trailing commas respected (auto-formatted)
+
+**Specific Patterns Used:**
+```python
+# Future annotations import (always first in new files)
+from __future__ import annotations
+
+# Type hints with Union style (not | syntax for compatibility)
+from typing import Any, Dict, List, Optional
+
+# Double quotes consistently
+message: str = "This is the project standard"
+
+# Descriptive docstrings with triple double quotes
+"""This is a module docstring.
+
+Provides functionality for X, Y, and Z operations.
+"""
+
+# Exception handling with specific error types
+try:
+    result = some_operation()
+except ValueError as exc:
+    raise HTTPException(status_code=400, detail=str(exc)) from exc
+```
+
+### Testing Patterns
+**Unit Test Structure:**
+```python
+class TestClassName:
+    """Test class functionality."""
+    
+    def test_method_name_success(self):
+        """Test successful operation."""
+        # Arrange, Act, Assert pattern
+        
+    @pytest.mark.asyncio
+    async def test_async_method(self):
+        """Test async functionality."""
+        
+    def test_error_condition(self):
+        """Test error handling."""
+        with pytest.raises(ValueError, match="specific error message"):
+            # Test code
+```
+
+**Mock Patterns:**
+```python
+# Combined context managers with parentheses (not nested with)
+with (
+    patch("app.main.asyncio.to_thread") as mock_to_thread,
+    patch("app.main.insert_document"),
+    patch("app.main.log_operation"),
+):
+    # Test implementation
+```
+
+### FastAPI Patterns
+**Route Definitions:**
+```python
+@app.post(
+    "/endpoint/{param}",
+    summary="Clear description",
+    responses={
+        404: {"description": "Not found"},
+        400: {"description": "Bad request"},
+        500: {"description": "Internal error"},
+    },
+)
+async def endpoint_function(
+    request: Request,
+    param: str = Path(..., description="Parameter description"),
+    body: ModelClass | None = None,
+) -> Any:
+    """Detailed docstring explaining endpoint functionality."""
+```
+
+**Error Handling:**
+```python
+try:
+    result = await asyncio.to_thread(client.method, **args)
+except AttributeError as exc:
+    log_operation(endpoint, method, params, None, str(exc))
+    raise HTTPException(status_code=404, detail=str(exc)) from exc
+except Exception as exc:
+    log_operation(endpoint, method, params, None, str(exc))
+    raise HTTPException(status_code=500, detail=str(exc)) from exc
+```
+
+### Database Patterns
+**MongoDB Operations:**
+```python
+# Always add timestamps to documents
+document = {**document, "timestamp": datetime.now(UTC)}
+result = db[collection].insert_one(document)
+
+# Consistent query patterns
+def find_latest(collection: str) -> dict[str, Any] | None:
+    """Return most recent document by timestamp."""
+    db = get_db()
+    return db[collection].find_one(sort=[("timestamp", -1)])
+```
+
+### Pydantic Model Patterns
+```python
+class RequestModel(BaseModel):
+    field_name: str = Field(..., description="Clear field description")
+    optional_field: str | None = None
+    
+    @field_validator("field_name")
+    @classmethod
+    def validate_field(cls, v: str) -> str:
+        """Validate and transform field value."""
+        return v.upper()  # Example transformation
+```
+
+### Async/Threading Patterns
+**Splitwise SDK Integration:**
+```python
+# Always use asyncio.to_thread for synchronous SDK calls
+result = await asyncio.to_thread(client.call_mapped_method, method_name, **args)
+
+# Consistent client access pattern
+client: SplitwiseClient = request.app.state.client
+```
+
+### File Organization Standards
+**Module Structure:**
+- `app/main.py` - FastAPI app and route definitions only
+- `app/models.py` - Pydantic schemas only  
+- `app/splitwise_client.py` - SDK wrapper and method mapping
+- `app/custom_methods.py` - Business logic functions (async)
+- `app/db.py` - Database utilities (sync functions)
+- `app/utils.py` - Pure utility functions
+- `app/logging_utils.py` - Logging helpers
+
+**Import Organization:**
+```python
+# Standard library imports
+from __future__ import annotations
+import asyncio
+import os
+from typing import Any
+
+# Third-party imports  
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+# Local imports
+from . import custom_methods
+from .db import find_latest, insert_document
+from .models import RequestModel
+```
+
+### Error Handling Philosophy
+- **Be Specific**: Use appropriate HTTP status codes (404 for not found, 400 for bad input, 500 for internal errors)
+- **Preserve Context**: Use `raise ... from exc` to maintain exception chains
+- **Log Everything**: All operations logged with context for debugging
+- **Fail Fast**: Validate inputs early and return clear error messages
+
+### Documentation Standards
+- **Docstrings**: Triple double quotes, clear descriptions
+- **Type Hints**: All functions and methods fully typed
+- **Comments**: Explain WHY, not WHAT (code should be self-documenting)
+- **Examples**: Include usage examples in complex docstrings
+
+### Makefile Usage
+Always use Makefile commands for consistency:
+- `make dev` - Start development server
+- `make test-all` - Run all checks and unit tests
+- `make ci-full` - Complete CI pipeline with integration tests
+- `make format` - Format code (before committing)
+- `make lint-fix` - Fix linting issues automatically

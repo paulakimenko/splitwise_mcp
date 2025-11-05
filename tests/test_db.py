@@ -3,8 +3,6 @@
 from datetime import datetime
 from unittest.mock import MagicMock, Mock, patch
 
-import pytest
-
 from app.db import find_all, find_latest, get_client, get_db, insert_document
 
 

@@ -15,12 +15,11 @@ the provided client.
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from dateutil import parser as date_parser  # type: ignore
 
-from .db import find_all, insert_document
+from .db import find_all
 from .utils import month_range
 
 if TYPE_CHECKING:

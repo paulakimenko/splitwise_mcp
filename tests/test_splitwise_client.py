@@ -22,7 +22,10 @@ class TestSplitwiseClientInit:
 
     def test_init_with_oauth_credentials(self):
         """Test initialization with OAuth consumer credentials."""
-        with patch("app.splitwise_client.Splitwise") as mock_splitwise:
+        with (
+            patch("app.splitwise_client.Splitwise") as mock_splitwise,
+            patch.dict(os.environ, {}, clear=True),
+        ):
             client = SplitwiseClient(
                 consumer_key="test_consumer_key", consumer_secret="test_consumer_secret"
             )
@@ -52,9 +55,10 @@ class TestSplitwiseClientInit:
                     "SPLITWISE_CONSUMER_KEY": "env_consumer_key",
                     "SPLITWISE_CONSUMER_SECRET": "env_consumer_secret",
                 },
+                clear=True,
             ),
         ):
-            client = SplitwiseClient()
+            SplitwiseClient()
             mock_splitwise.assert_called_once_with(
                 consumer_key="env_consumer_key",
                 consumer_secret="env_consumer_secret",

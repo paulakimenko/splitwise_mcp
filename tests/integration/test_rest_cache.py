@@ -4,7 +4,6 @@ These tests validate that the cached REST endpoints work correctly
 after MCP operations have populated the database.
 """
 
-import pytest
 from fastapi.testclient import TestClient
 
 

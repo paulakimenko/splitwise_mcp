@@ -1,13 +1,11 @@
 """Tests for app.main module (FastAPI application)."""
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import AsyncClient
 
-from app.main import app, get_client
+from app.main import app
 
 
 @pytest.fixture
@@ -36,7 +34,10 @@ class TestStartupEvent:
         """Test startup fails without API key."""
         with (
             patch.dict("os.environ", {}, clear=True),
-            pytest.raises(RuntimeError, match="SPLITWISE_API_KEY must be set"),
+            pytest.raises(
+                RuntimeError,
+                match="You must set either SPLITWISE_API_KEY or both SPLITWISE_CONSUMER_KEY and SPLITWISE_CONSUMER_SECRET in the environment",
+            ),
         ):
             from unittest.mock import MagicMock
 
@@ -68,8 +69,8 @@ class TestMCPEndpoint:
         """Test successful MCP method call."""
         with (
             patch("app.main.asyncio.to_thread") as mock_to_thread,
-            patch("app.main.insert_document") as mock_insert,
-            patch("app.main.log_operation") as mock_log,
+            patch("app.main.insert_document"),
+            patch("app.main.log_operation"),
         ):
             # Mock the client
             mock_client = Mock()
@@ -92,7 +93,7 @@ class TestMCPEndpoint:
         """Test MCP endpoint with unsupported method."""
         with (
             patch("app.main.asyncio.to_thread") as mock_to_thread,
-            patch("app.main.log_operation") as mock_log,
+            patch("app.main.log_operation"),
         ):
             mock_client = Mock()
             app.state.client = mock_client
@@ -109,7 +110,7 @@ class TestMCPEndpoint:
         """Test MCP endpoint with internal error."""
         with (
             patch("app.main.asyncio.to_thread") as mock_to_thread,
-            patch("app.main.log_operation") as mock_log,
+            patch("app.main.log_operation"),
         ):
             mock_client = Mock()
             app.state.client = mock_client
@@ -245,8 +246,8 @@ class TestCustomEndpoints:
         """Test add expense equal split endpoint."""
         with (
             patch("app.main.asyncio.to_thread") as mock_to_thread,
-            patch("app.main.insert_document") as mock_insert,
-            patch("app.main.log_operation") as mock_log,
+            patch("app.main.insert_document"),
+            patch("app.main.log_operation"),
             patch("splitwise.expense.Expense") as mock_expense_class,
             patch("splitwise.expense.ExpenseUser") as mock_expense_user_class,
         ):

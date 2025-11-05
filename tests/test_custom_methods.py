@@ -1,7 +1,6 @@
 """Tests for app.custom_methods module."""
 
-from datetime import datetime
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
