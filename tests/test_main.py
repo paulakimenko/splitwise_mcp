@@ -34,15 +34,17 @@ class TestStartupEvent:
     @pytest.mark.asyncio
     async def test_startup_without_api_key(self):
         """Test startup fails without API key."""
-        with patch.dict("os.environ", {}, clear=True):
-            with pytest.raises(RuntimeError, match="SPLITWISE_API_KEY must be set"):
-                from unittest.mock import MagicMock
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            pytest.raises(RuntimeError, match="SPLITWISE_API_KEY must be set"),
+        ):
+            from unittest.mock import MagicMock
 
-                from app.main import lifespan
+            from app.main import lifespan
 
-                mock_app = MagicMock()
-                async with lifespan(mock_app):
-                    pass
+            mock_app = MagicMock()
+            async with lifespan(mock_app):
+                pass
 
     @pytest.mark.asyncio
     @patch("app.main.SplitwiseClient")
@@ -64,55 +66,61 @@ class TestMCPEndpoint:
 
     def test_mcp_endpoint_success(self, test_client):
         """Test successful MCP method call."""
-        with patch("app.main.asyncio.to_thread") as mock_to_thread:
-            with patch("app.main.insert_document") as mock_insert:
-                with patch("app.main.log_operation") as mock_log:
-                    # Mock the client
-                    mock_client = Mock()
-                    mock_client.call_mapped_method.return_value = {"test": "result"}
-                    mock_client.convert.return_value = {"converted": "result"}
+        with (
+            patch("app.main.asyncio.to_thread") as mock_to_thread,
+            patch("app.main.insert_document") as mock_insert,
+            patch("app.main.log_operation") as mock_log,
+        ):
+            # Mock the client
+            mock_client = Mock()
+            mock_client.call_mapped_method.return_value = {"test": "result"}
+            mock_client.convert.return_value = {"converted": "result"}
 
-                    app.state.client = mock_client
+            app.state.client = mock_client
 
-                    # Setup async mock
-                    mock_to_thread.return_value = {"test": "result"}
+            # Setup async mock
+            mock_to_thread.return_value = {"test": "result"}
 
-                    response = test_client.post(
-                        "/mcp/list_groups", json={"args": {"param": "value"}}
-                    )
+            response = test_client.post(
+                "/mcp/list_groups", json={"args": {"param": "value"}}
+            )
 
-                    assert response.status_code == 200
-                    assert response.json() == {"converted": "result"}
+            assert response.status_code == 200
+            assert response.json() == {"converted": "result"}
 
     def test_mcp_endpoint_method_not_found(self, test_client):
         """Test MCP endpoint with unsupported method."""
-        with patch("app.main.asyncio.to_thread") as mock_to_thread:
-            with patch("app.main.log_operation") as mock_log:
-                mock_client = Mock()
-                app.state.client = mock_client
+        with (
+            patch("app.main.asyncio.to_thread") as mock_to_thread,
+            patch("app.main.log_operation") as mock_log,
+        ):
+            mock_client = Mock()
+            app.state.client = mock_client
 
-                # Simulate AttributeError for unsupported method
-                mock_to_thread.side_effect = AttributeError("Unsupported method")
+            # Simulate AttributeError for unsupported method
+            mock_to_thread.side_effect = AttributeError("Unsupported method")
 
-                response = test_client.post("/mcp/invalid_method", json={})
+            response = test_client.post("/mcp/invalid_method", json={})
 
-                assert response.status_code == 404
-                assert "Unsupported method" in response.json()["detail"]
+            assert response.status_code == 404
+            assert "Unsupported method" in response.json()["detail"]
 
     def test_mcp_endpoint_internal_error(self, test_client):
         """Test MCP endpoint with internal error."""
-        with patch("app.main.asyncio.to_thread") as mock_to_thread:
-            with patch("app.main.log_operation") as mock_log:
-                mock_client = Mock()
-                app.state.client = mock_client
+        with (
+            patch("app.main.asyncio.to_thread") as mock_to_thread,
+            patch("app.main.log_operation") as mock_log,
+        ):
+            mock_client = Mock()
+            app.state.client = mock_client
 
-                # Simulate internal error
-                mock_to_thread.side_effect = Exception("Internal error")
+            # Simulate internal error
+            mock_to_thread.side_effect = Exception("Internal error")
 
-                response = test_client.post("/mcp/list_groups", json={})
+            response = test_client.post("/mcp/list_groups", json={})
 
-                assert response.status_code == 500
-                assert "Internal error" in response.json()["detail"]
+            assert response.status_code == 500
+            assert "Internal error" in response.json()["detail"]
 
 
 class TestRESTEndpoints:
@@ -235,58 +243,56 @@ class TestCustomEndpoints:
 
     def test_add_expense_equal_split_success(self, test_client):
         """Test add expense equal split endpoint."""
-        with patch("app.main.asyncio.to_thread") as mock_to_thread:
-            with patch("app.main.insert_document") as mock_insert:
-                with patch("app.main.log_operation") as mock_log:
-                    # Mock the client and its methods
-                    mock_client = Mock()
-                    mock_group = Mock()
-                    mock_group.id = 1
-                    mock_participant = Mock()
-                    mock_participant.id = 67890
+        with (
+            patch("app.main.asyncio.to_thread") as mock_to_thread,
+            patch("app.main.insert_document") as mock_insert,
+            patch("app.main.log_operation") as mock_log,
+            patch("splitwise.expense.Expense") as mock_expense_class,
+            patch("splitwise.expense.ExpenseUser") as mock_expense_user_class,
+        ):
+            # Mock the client and its methods
+            mock_client = Mock()
+            mock_group = Mock()
+            mock_group.id = 1
+            mock_participant = Mock()
+            mock_participant.id = 67890
 
-                    mock_client.get_group_by_name.return_value = mock_group
-                    mock_client.get_user_from_group.return_value = mock_participant
-                    mock_client.get_current_user_id.return_value = 12345
-                    mock_client.convert.return_value = {"id": 123, "cost": "100.0"}
+            mock_client.get_group_by_name.return_value = mock_group
+            mock_client.get_user_from_group.return_value = mock_participant
+            mock_client.get_current_user_id.return_value = 12345
+            mock_client.convert.return_value = {"id": 123, "cost": "100.0"}
 
-                    app.state.client = mock_client
+            app.state.client = mock_client
 
-                    # Mock the splitwise SDK classes
-                    with patch("splitwise.expense.Expense") as mock_expense_class:
-                        with patch(
-                            "splitwise.expense.ExpenseUser"
-                        ) as mock_expense_user_class:
-                            mock_expense = Mock()
-                            mock_expense_class.return_value = mock_expense
+            # Mock the splitwise SDK classes
+            mock_expense = Mock()
+            mock_expense_class.return_value = mock_expense
 
-                            mock_user1 = Mock()
-                            mock_user2 = Mock()
-                            mock_expense_user_class.side_effect = [
-                                mock_user1,
-                                mock_user2,
-                            ]
+            mock_user1 = Mock()
+            mock_user2 = Mock()
+            mock_expense_user_class.side_effect = [
+                mock_user1,
+                mock_user2,
+            ]
 
-                            # Mock the createExpense call
-                            mock_created_expense = Mock()
-                            mock_to_thread.return_value = mock_created_expense
+            # Mock the createExpense call
+            mock_created_expense = Mock()
+            mock_to_thread.return_value = mock_created_expense
 
-                            payload = {
-                                "group_name": "Test Group",
-                                "amount": 100.0,
-                                "currency_code": "USD",
-                                "participant_name": "John Doe",
-                                "description": "Test expense",
-                            }
+            payload = {
+                "group_name": "Test Group",
+                "amount": 100.0,
+                "currency_code": "USD",
+                "participant_name": "John Doe",
+                "description": "Test expense",
+            }
 
-                            response = test_client.post(
-                                "/custom/add_expense_equal_split", json=payload
-                            )
+            response = test_client.post("/custom/add_expense_equal_split", json=payload)
 
-                            if response.status_code != 200:
-                                print(f"Error response: {response.json()}")
-                            assert response.status_code == 200
-                            assert response.json() == {"id": 123, "cost": "100.0"}
+            if response.status_code != 200:
+                print(f"Error response: {response.json()}")
+            assert response.status_code == 200
+            assert response.json() == {"id": 123, "cost": "100.0"}
 
     def test_add_expense_equal_split_group_not_found(self, test_client):
         """Test add expense with group not found."""
