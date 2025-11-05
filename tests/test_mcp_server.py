@@ -1,14 +1,9 @@
 """Tests for app.mcp_server module (MCP server implementation)."""
 
-import asyncio
-from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
 
-from app.mcp_server import mcp
 from app.splitwise_client import SplitwiseClient
 
 

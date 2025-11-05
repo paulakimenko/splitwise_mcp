@@ -9,7 +9,6 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.routing import Mount
 
 from . import custom_methods
 from .db import find_latest, insert_document
