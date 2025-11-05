@@ -7,15 +7,6 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 
-class MCPCallRequest(BaseModel):
-    """Request schema for dynamic MCP method calls."""
-
-    args: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Arguments to pass to the underlying Splitwise SDK method",
-    )
-
-
 class AddExpenseEqualSplitRequest(BaseModel):
     group_name: str = Field(..., description="Group name")
     amount: float = Field(..., description="Expense amount")

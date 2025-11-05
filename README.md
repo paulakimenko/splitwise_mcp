@@ -1,18 +1,22 @@
 # Splitwise MCP Service
 
-This repository contains a **Magic Control Panel (MCP)** server for the
+This repository contains a **Model Context Protocol (MCP)** server for the
 Splitwise API.  The goal of this project is to expose all Splitwise
-API methods through a single service while persisting the received
-data into a MongoDB database, logging every request/response, and
-offering REST endpoints to retrieve the cached data.  Additionally we
-provide a set of higher‑level helper endpoints to handle common
+API methods through both an official MCP server (for AI agents) and REST API 
+while persisting the received data into a MongoDB database, logging every 
+request/response, and offering REST endpoints to retrieve the cached data.  
+Additionally we provide a set of higher‑level helper endpoints to handle common
 scenarios such as adding expenses evenly or generating monthly reports.
 
 ## Features
 
-* ✅ **Mapping of Splitwise API methods** – each Splitwise method
-  (e.g. `getGroups`, `createExpense`) is exposed as a POST route under
-  `/mcp/{method_name}`.  When invoked, the server calls the underlying
+* ✅ **Official MCP Server** – implements the Model Context Protocol using
+  the [official Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk).
+  Provides 10+ MCP tools (`get_current_user`, `list_groups`, `get_group`, 
+  `list_expenses`, etc.) and 2 MCP resources (`splitwise://group/{name}`, 
+  `splitwise://balance`) for AI agents to interact with Splitwise data.
+
+* ✅ **Splitwise API Integration** – each MCP tool calls the underlying
   Splitwise API via the [`splitwise` Python client](https://github.com/namaggarwal/splitwise),
   stores the returned data in the database, logs the call, and
   responds with a normalised JSON representation of the result.
@@ -22,10 +26,10 @@ scenarios such as adding expenses evenly or generating monthly reports.
   with a timestamp.  A separate `logs` collection captures
   metadata about each request/response pair for auditing.
 
-* ✅ **REST endpoints** – in addition to the MCP routes the
+* ✅ **REST endpoints** – in addition to the MCP server, the
   application provides GET endpoints such as `/groups`, `/expenses`,
   etc. which read from MongoDB and return cached data.  These
-  endpoints closely mirror Splitwise’s own HTTP API but without
+  endpoints closely mirror Splitwise's own HTTP API but without
   triggering calls to Splitwise – useful for quick lookups or
   offline access.
 
@@ -40,7 +44,7 @@ scenarios such as adding expenses evenly or generating monthly reports.
   platform capable of running Docker containers.  See
   **Deployment** below for details.
 
-* ✅ **Comprehensive Testing** – includes 61 unit tests with mocks
+* ✅ **Comprehensive Testing** – includes 76 unit tests with mocks
   plus integration tests that validate end-to-end functionality against
   the live Splitwise API. Integration tests create temporary test groups
   and clean up automatically.
@@ -103,6 +107,48 @@ docker-compose up --build
 
 **Access the API**: Open [`http://localhost:8000/docs`](http://localhost:8000/docs) for interactive API documentation.
 
+## Using the MCP Server
+
+The service provides both an MCP server for AI agents and REST endpoints for traditional HTTP clients:
+
+### MCP Protocol Access
+
+The MCP server is available at `http://localhost:8000/mcp` and implements the official Model Context Protocol. AI agents and MCP clients can connect to:
+
+```
+http://localhost:8000/mcp
+```
+
+**Available MCP Tools:**
+- `get_current_user` - Get authenticated user information
+- `list_groups` - List all groups for the user
+- `get_group` - Get specific group by ID
+- `list_expenses` - List expenses (with optional filters)
+- `get_expense` - Get specific expense by ID
+- `list_friends` - List all friends
+- `get_friend` - Get specific friend by ID
+- `list_categories` - List expense categories
+- `list_currencies` - List supported currencies
+- `get_exchange_rates` - Get current exchange rates
+- `list_notifications` - List notifications
+
+**Available MCP Resources:**
+- `splitwise://group/{name}` - Access group information by name
+- `splitwise://balance` - Access current user balance information
+
+**MCP Client Integration:**
+AI agents can connect using any MCP-compatible client. The server handles authentication, data persistence, and audit logging automatically. All MCP tool calls maintain the same database persistence and logging as the original HTTP endpoints.
+
+### REST API Access
+
+Traditional HTTP endpoints remain available for direct integration:
+
+- `GET /groups` - Cached groups data
+- `GET /expenses` - Cached expenses data  
+- `GET /friends` - Cached friends data
+- `GET /logs` - Operation audit logs
+- `GET /custom/*` - Helper endpoints (see Custom Usage Examples below)
+
 ## Deployment
 
 The project is designed for containerised deployment.  An example
@@ -124,15 +170,45 @@ EasyPanel.
 2. Configure your Hetzner/EasyPanel service:
 
    * Set the container image to `your-dockerhub-user/splitwise-mcp:latest`.
-   * Add environment variables for `SPLITWISE_API_KEY`, `MONGO_URI` and
-     optionally `BASE_URL` (e.g. `https://sw-mcp.paulakimenko.xyz`).
-   * Expose port **8000** (FastAPI default).
+   * Add environment variables:
+     - `SPLITWISE_API_KEY` (required) - Your Splitwise API key
+     - `MONGO_URI` (optional) - MongoDB connection string (defaults to `mongodb://localhost:27017`)
+     - `DB_NAME` (optional) - Database name (defaults to `splitwise`)
+   * Expose port **8000** (serves both REST API and MCP server).
    * Optionally run the provided `docker-compose.yml` if you need
      MongoDB on the same host.
 
 3. Point your domain (`https://sw-mcp.paulakimenko.xyz`) to the
    deployed service.  Ensure HTTPS termination is handled by your
    provider or reverse proxy.
+
+## Architecture
+
+The service follows a three-layer architecture:
+
+```
+┌─────────────────────────────────────────────┐
+│                FastAPI App                  │
+├─────────────────────────────────────────────┤
+│ MCP Server        │ REST Cache    │ Custom  │
+│ (Official SDK)    │ Endpoints     │ Helpers │
+│                   │               │         │
+│ • Tools (10+)     │ • /groups     │ • /custom/* │
+│ • Resources (2)   │ • /expenses   │         │
+│ • /mcp            │ • /friends    │         │
+├─────────────────────────────────────────────┤
+│            Splitwise SDK Client             │
+├─────────────────────────────────────────────┤
+│     MongoDB Persistence & Audit Logging    │
+└─────────────────────────────────────────────┘
+```
+
+**Key Components:**
+- **MCP Server**: Official MCP SDK implementation for AI agent integration
+- **REST Cache Layer**: Read-only endpoints serving cached MongoDB data  
+- **Custom Helpers**: Business logic for common expense scenarios
+- **Database Persistence**: All MCP operations automatically cached with timestamps
+- **Audit Logging**: Complete operation history for debugging and compliance
 
 ## Custom Usage Examples
 
@@ -187,8 +263,8 @@ make ci-full             # Full CI + integration tests
 
 The project includes comprehensive testing:
 
-- **Unit Tests** (61 tests): Fast, mock-based tests covering all modules
-- **Integration Tests**: End-to-end tests against live Splitwise API
+- **Unit Tests** (76 tests): Fast, mock-based tests covering all modules including MCP server
+- **Integration Tests**: End-to-end tests against live Splitwise API and MCP server integration
 - **Test Coverage**: Detailed coverage reporting with pytest-cov
 
 ```bash
@@ -209,10 +285,10 @@ make integration-test
 
 ## Contributing
 
-Pull requests are welcome! If you find a bug or want to add additional helper endpoints:
+Pull requests are welcome! If you find a bug or want to add additional MCP tools, helper endpoints, or improvements:
 
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Make your changes and add tests
 4. Run `make test-full` to verify everything works
 5. Submit a pull request
@@ -221,4 +297,12 @@ Pull requests are welcome! If you find a bug or want to add additional helper en
 - Use `make lint-fix` to auto-format code with Ruff
 - Add unit tests for new functionality  
 - Add integration tests for API endpoints
+- For MCP tools: add tests in `tests/test_mcp_server.py`
 - Update documentation as needed
+- Follow the existing patterns for async operations and database persistence
+
+**Adding MCP Tools:**
+1. Add your tool function to `app/mcp_server.py` with `@mcp.tool()` decorator
+2. Use `await _call_splitwise_method(ctx, "method_name", **args)` for Splitwise API calls
+3. Add corresponding tests to `tests/test_mcp_server.py`
+4. Update this README with the new tool in the MCP Tools list

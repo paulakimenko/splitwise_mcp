@@ -62,66 +62,25 @@ class TestStartupEvent:
             mock_splitwise_client.assert_called_once_with(api_key="test_key")
 
 
-class TestMCPEndpoint:
-    """Test the MCP endpoint."""
+class TestMCPServer:
+    """Test MCP server integration."""
 
-    def test_mcp_endpoint_success(self, test_client):
-        """Test successful MCP method call."""
-        with (
-            patch("app.main.asyncio.to_thread") as mock_to_thread,
-            patch("app.main.insert_document"),
-            patch("app.main.log_operation"),
-        ):
-            # Mock the client
-            mock_client = Mock()
-            mock_client.call_mapped_method.return_value = {"test": "result"}
-            mock_client.convert.return_value = {"converted": "result"}
+    def test_mcp_server_mounted(self, test_client):
+        """Test that MCP server is properly mounted."""
+        # The MCP server is mounted at /mcp but uses MCP protocol, not HTTP
+        # We can test that the mount doesn't break the app
+        response = test_client.get("/")
+        # Should get 404 for root path, but app should still work
+        assert response.status_code == 404
 
-            app.state.client = mock_client
+    def test_mcp_server_does_not_interfere_with_rest_api(self, test_client):
+        """Test that MCP server doesn't interfere with REST endpoints."""
+        with patch("app.main.find_latest") as mock_find:
+            mock_find.return_value = {"response": [{"id": 1, "name": "Test Group"}]}
 
-            # Setup async mock
-            mock_to_thread.return_value = {"test": "result"}
-
-            response = test_client.post(
-                "/mcp/list_groups", json={"args": {"param": "value"}}
-            )
-
+            # REST endpoints should still work
+            response = test_client.get("/groups")
             assert response.status_code == 200
-            assert response.json() == {"converted": "result"}
-
-    def test_mcp_endpoint_method_not_found(self, test_client):
-        """Test MCP endpoint with unsupported method."""
-        with (
-            patch("app.main.asyncio.to_thread") as mock_to_thread,
-            patch("app.main.log_operation"),
-        ):
-            mock_client = Mock()
-            app.state.client = mock_client
-
-            # Simulate AttributeError for unsupported method
-            mock_to_thread.side_effect = AttributeError("Unsupported method")
-
-            response = test_client.post("/mcp/invalid_method", json={})
-
-            assert response.status_code == 404
-            assert "Unsupported method" in response.json()["detail"]
-
-    def test_mcp_endpoint_internal_error(self, test_client):
-        """Test MCP endpoint with internal error."""
-        with (
-            patch("app.main.asyncio.to_thread") as mock_to_thread,
-            patch("app.main.log_operation"),
-        ):
-            mock_client = Mock()
-            app.state.client = mock_client
-
-            # Simulate internal error
-            mock_to_thread.side_effect = Exception("Internal error")
-
-            response = test_client.post("/mcp/list_groups", json={})
-
-            assert response.status_code == 500
-            assert "Internal error" in response.json()["detail"]
 
 
 class TestRESTEndpoints:

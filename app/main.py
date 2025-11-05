@@ -7,16 +7,17 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Path, Request, status
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.routing import Mount
 
 from . import custom_methods
 from .db import find_latest, insert_document
 from .logging_utils import log_operation
+from .mcp_server import mcp
 from .models import (
     AddExpenseEqualSplitRequest,
     GenericResponse,
-    MCPCallRequest,
 )
 from .splitwise_client import SplitwiseClient
 
@@ -53,74 +54,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount the official MCP server at /mcp path
+app.mount("/mcp", mcp.streamable_http_app())
+
 
 def get_client(request: Request) -> SplitwiseClient:
     """Dependency to obtain a SplitwiseClient instance stored in app state."""
     return request.app.state.client
-
-
-@app.post(
-    "/mcp/{method_name}",
-    responses={
-        404: {"description": "Method not found"},
-        400: {"description": "Bad request"},
-        500: {"description": "Internal error"},
-    },
-    summary="Invoke a Splitwise API method via MCP",
-)
-async def call_mcp_method(
-    request: Request,
-    method_name: str = Path(..., description="Snake_case name of the method"),
-    body: MCPCallRequest | None = None,
-) -> Any:
-    """
-    Generic route to invoke methods on the Splitwise client.  The
-    request body must contain a JSON object `args` mapping to the
-    parameters expected by the underlying Splitwise SDK method.  The
-    result is converted to JSON‑serialisable data and persisted in
-    the database under a collection named after `method_name`.
-    """
-    client: SplitwiseClient = request.app.state.client
-    args = body.args if body else {}
-    try:
-        # Because the Splitwise SDK is synchronous, run in thread
-        result = await asyncio.to_thread(client.call_mapped_method, method_name, **args)
-    except AttributeError as exc:
-        log_operation(
-            endpoint=f"/mcp/{method_name}",
-            method="POST",
-            params=args,
-            response=None,
-            error=str(exc),
-        )
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
-    except Exception as exc:
-        log_operation(
-            endpoint=f"/mcp/{method_name}",
-            method="POST",
-            params=args,
-            response=None,
-            error=str(exc),
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
-        ) from exc
-    # Convert complex objects to dicts for storage and response
-    response_data = client.convert(result)
-    # Persist into database
-    insert_document(method_name, {"response": response_data})
-    # Log operation
-    log_operation(
-        endpoint=f"/mcp/{method_name}",
-        method="POST",
-        params=args,
-        response=response_data,
-    )
-    return response_data
 
 
 # REST endpoints for cached data
