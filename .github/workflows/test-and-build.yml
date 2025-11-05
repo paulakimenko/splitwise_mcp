@@ -122,21 +122,69 @@ jobs:
       with:
         python-version: 3.11
     
-    - name: Install linting tools
+    - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install black isort flake8 mypy
         pip install -r requirements.txt
+        pip install -r requirements-dev.txt
     
-    - name: Run black
-      run: black --check --diff app/ tests/
+    - name: Run Ruff linting
+      run: ruff check app/ tests/
     
-    - name: Run isort
-      run: isort --check-only --diff app/ tests/
-    
-    - name: Run flake8
-      run: flake8 app/ tests/ --max-line-length=88 --extend-ignore=E203,W503
+    - name: Run Ruff formatting check
+      run: ruff format app/ tests/ --check
     
     - name: Run mypy (optional - may have issues with splitwise types)
       continue-on-error: true
       run: mypy app/ --ignore-missing-imports
+
+  integration:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+    
+    - name: Wait for MongoDB
+      run: |
+        until mongosh --host localhost:27017 --eval "db.adminCommand('ping')" > /dev/null 2>&1; do
+          echo "Waiting for MongoDB to be ready..."
+          sleep 2
+        done
+    
+    - name: Run integration tests
+      env:
+        SPLITWISE_API_KEY: ${{ secrets.SPLITWISE_API_KEY }}
+        MONGO_URI: "mongodb://localhost:27017"
+        DB_NAME: "splitwise_integration_test"
+      run: |
+        if [ -z "$SPLITWISE_API_KEY" ]; then
+          echo "⚠️ SPLITWISE_API_KEY not set - skipping integration tests"
+          echo "To enable integration tests, set SPLITWISE_API_KEY in repository secrets"
+          exit 0
+        fi
+        
+        echo "🚀 Running integration tests against live Splitwise API..."
+        pytest tests/integration/ -v --tb=short -s

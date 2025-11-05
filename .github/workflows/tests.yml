@@ -27,16 +27,16 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
-        pip install pytest pytest-asyncio pytest-mock httpx
     
     - name: Run linting with Ruff
       run: |
         ruff check app/ tests/
+        ruff format app/ tests/ --check
     
-    - name: Run tests
+    - name: Run unit tests
       env:
         SPLITWISE_API_KEY: "test_key_for_github_actions"
         MONGO_URI: "mongodb://localhost:27017"
         DB_NAME: "splitwise_test"
       run: |
-        pytest tests/ -v
+        pytest tests/ -v --ignore=tests/integration

@@ -57,10 +57,53 @@ Required environment variables:
 - `MONGO_URI` - MongoDB connection (defaults to `mongodb://localhost:27017`)
 - `DB_NAME` - Database name (defaults to `splitwise`)
 
-### Local Development
+### Quick Start with Makefile
+The project includes a comprehensive Makefile for all development operations:
+
 ```bash
-python -m venv venv && source venv/bin/activate
+# Full setup from scratch
+make setup                    # Creates venv, installs deps, creates .env
+
+# Development server
+make dev                      # Start FastAPI server with reload
+
+# Testing
+make unit-test               # Run unit tests only
+make integration-test        # Run integration tests (requires API key)
+make test-all               # Run all checks + unit tests
+make test-full              # Run all checks + unit + integration tests
+
+# Code quality
+make lint                   # Check code with Ruff
+make lint-fix              # Auto-fix Ruff issues
+make format                # Format code with Ruff
+make check                 # Run all quality checks
+
+# Docker operations
+make docker-compose-up     # Start services
+make docker-compose-down   # Stop services
+make docker-dev           # Start dev environment
+
+# CI simulation
+make ci                   # Full CI pipeline (unit tests)
+make ci-full             # Full CI + integration tests
+```
+
+### Manual Development Setup
+```bash
+# Create and activate virtual environment
+python -m venv .venv
+source .venv/bin/activate  # or: .venv\Scripts\activate on Windows
+
+# Install dependencies
 pip install -r requirements.txt
+pip install -r requirements-dev.txt
+
+# Create environment file
+cp .env.example .env
+# Edit .env and add your SPLITWISE_API_KEY
+
+# Start development server
 uvicorn app.main:app --reload
 ```
 
@@ -116,7 +159,48 @@ docker-compose up --build
 
 ## Testing & Debugging
 
+### Test Architecture
+The project includes comprehensive testing at multiple levels:
+
+- **Unit Tests** (`tests/`) - Mock-based testing of all modules (61 tests)
+- **Integration Tests** (`tests/integration/`) - End-to-end tests against live Splitwise API
+- **Test Coverage** - Comprehensive coverage reporting with pytest-cov
+
+### Running Tests
+```bash
+# Unit tests only (safe, uses mocks)
+make unit-test
+
+# Integration tests (requires SPLITWISE_API_KEY, creates/deletes test group)
+make integration-test
+
+# All tests with coverage
+make unit-test-coverage
+
+# Full test suite
+make test-full
+```
+
+### Integration Test Behavior
+Integration tests create a temporary test group in your Splitwise account:
+- Group name: `MCP_Test_Group_{timestamp}`
+- Creates real expenses for testing
+- Automatically cleans up all created data
+- Requires valid `SPLITWISE_API_KEY` in environment
+
+### Code Quality Tools
+- **Ruff** - Modern Python linter and formatter (replaces Black, isort, flake8)
+- **MyPy** - Static type checking (optional)
+- **pytest** - Test framework with asyncio support
+
+### Development Tools
 - **API Documentation**: `http://localhost:8000/docs` (Swagger UI)
 - **Logs Endpoint**: `GET /logs` returns recent operation audit trail
 - **Health Check**: Any REST endpoint will verify MongoDB connectivity
 - **Error Patterns**: 404 for unmapped methods, 400 for SDK errors, 500 for internal errors
+
+### CI/CD Pipeline
+- **GitHub Actions** - Automated testing on all pushes and PRs
+- **Multi-Python** - Tests against Python 3.11 and 3.12
+- **Docker Build** - Validates container builds
+- **Integration Tests** - Optional integration testing on main branch (requires secrets)
