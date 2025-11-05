@@ -29,9 +29,16 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     api_key = os.environ.get("SPLITWISE_API_KEY")
-    if not api_key:
-        raise RuntimeError("SPLITWISE_API_KEY must be set in the environment")
-    app.state.client = SplitwiseClient(api_key=api_key)
+    consumer_key = os.environ.get("SPLITWISE_CONSUMER_KEY")
+    consumer_secret = os.environ.get("SPLITWISE_CONSUMER_SECRET")
+    if api_key:
+        app.state.client = SplitwiseClient(api_key=api_key)
+    elif consumer_key and consumer_secret:
+        app.state.client = SplitwiseClient(consumer_key=consumer_key, consumer_secret=consumer_secret)
+    else:
+        raise RuntimeError(
+            "You must set either SPLITWISE_API_KEY or both SPLITWISE_CONSUMER_KEY and SPLITWISE_CONSUMER_SECRET in the environment"
+        )
     yield
     # Shutdown (if needed)
 
