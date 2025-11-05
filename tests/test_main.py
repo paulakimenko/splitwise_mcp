@@ -130,10 +130,10 @@ class TestRESTEndpoints:
 
     def test_get_logs_success(self, test_client):
         """Test logs endpoint."""
-        with patch("app.db.get_db") as mock_get_db:
+        with patch("app.main.get_db") as mock_get_db:
             mock_db = MagicMock()
-            mock_collection = Mock()
-            mock_cursor = Mock()
+            mock_collection = MagicMock()
+            mock_cursor = MagicMock()
 
             # Setup the chain: db["logs"].find().sort().limit()
             mock_db.__getitem__.return_value = mock_collection
@@ -154,10 +154,10 @@ class TestRESTEndpoints:
 
     def test_health_check_database_connected(self, test_client):
         """Test health endpoint with database connected."""
-        with patch("app.db.get_db") as mock_get_db:
+        with patch("app.main.get_db") as mock_get_db:
             mock_db = MagicMock()
-            mock_client = Mock()
-            mock_admin = Mock()
+            mock_client = MagicMock()
+            mock_admin = MagicMock()
 
             # Setup the chain: db.client.admin.command('ping')
             mock_db.client = mock_client
@@ -176,7 +176,7 @@ class TestRESTEndpoints:
 
     def test_health_check_database_disconnected(self, test_client):
         """Test health endpoint with database disconnected."""
-        with patch("app.db.get_db") as mock_get_db:
+        with patch("app.main.get_db") as mock_get_db:
             mock_get_db.side_effect = Exception("Connection refused")
 
             response = test_client.get("/health")

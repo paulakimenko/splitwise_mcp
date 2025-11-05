@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import custom_methods
-from .db import find_latest, insert_document
+from .db import find_latest, get_db, insert_document
 from .logging_utils import log_operation
 from .mcp_server import mcp
 from .models import (
@@ -68,8 +68,6 @@ async def health_check() -> dict[str, Any]:
 
     # Check database connectivity
     try:
-        from .db import get_db
-
         db = get_db()
         # Simple ping to test connectivity - get the MongoDB client and ping
         client = db.client
@@ -143,8 +141,6 @@ async def get_friends() -> Any:
     summary="Return the latest 50 log entries",
 )
 async def get_logs() -> Any:
-    from .db import get_db
-
     try:
         db = get_db()
         logs = list(db["logs"].find().sort("timestamp", -1).limit(50))
