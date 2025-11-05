@@ -73,7 +73,7 @@ class TestSplitwiseClientInit:
                 },
             ),
         ):
-            client = SplitwiseClient()
+            SplitwiseClient()
             mock_splitwise.assert_called_once_with(
                 consumer_key="", consumer_secret="", api_key="env_api_key"
             )
