@@ -9,7 +9,7 @@ blocking IO in a threadpool when declaring route handlers as async.
 from __future__ import annotations
 
 import os
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from pymongo import MongoClient
