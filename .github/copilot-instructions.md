@@ -2,15 +2,16 @@
 
 ## Architecture Overview
 
-This is a **FastAPI-based MCP (Magic Control Panel) proxy service** that wraps the Splitwise API with caching, logging, and localized helper endpoints. The service follows a three-layer architecture:
+This is a **FastAPI-based Model Context Protocol (MCP) server** that integrates the Splitwise API with the official Python MCP SDK, providing both MCP tools for AI agents and REST endpoints for traditional clients. The service follows a three-layer architecture:
 
-1. **MCP Layer** (`/mcp/{method_name}`) - Generic proxy routes that map snake_case names to Splitwise SDK camelCase methods
+1. **MCP Server Layer** (`/mcp`) - Official MCP SDK server with tools and resources for AI agent integration
 2. **REST Cache Layer** (`/groups`, `/expenses`, etc.) - Read-only endpoints serving cached MongoDB data
 3. **Custom Helpers** (`/custom/*`) - Localized business logic for common expense scenarios
 
 ### Key Components
 
-- **`app/main.py`** - FastAPI app with route definitions and dependency injection
+- **`app/main.py`** - FastAPI app with route definitions, dependency injection, and MCP server mounting
+- **`app/mcp_server.py`** - Official MCP server implementation with tools, resources, and lifespan management
 - **`app/splitwise_client.py`** - Wrapper around `splitwise` SDK with method mapping and data conversion
 - **`app/custom_methods.py`** - Higher-level business logic (expense filtering, reports)
 - **`app/db.py`** - MongoDB utilities with timestamp-based document insertion
@@ -34,12 +35,22 @@ Splitwise SDK is synchronous, so use `asyncio.to_thread()` for all SDK calls:
 result = await asyncio.to_thread(client.call_mapped_method, method_name, **args)
 ```
 
-### Data Persistence Pattern
-Every successful MCP call automatically persists results with timestamps:
+### MCP Tool Pattern
+All MCP tools use the `_call_splitwise_method` helper for consistent async operations and persistence:
 ```python
-response_data = client.convert(result)  # Convert SDK objects to dicts
-insert_document(method_name, {"response": response_data})  # Store in MongoDB
-log_operation(endpoint, method, params, response_data)  # Audit logging
+@mcp.tool()
+async def get_current_user(ctx: Context) -> dict[str, Any]:
+    """Get current authenticated user information."""
+    return await _call_splitwise_method(ctx, "get_current_user")
+
+async def _call_splitwise_method(ctx: Context, method_name: str, **kwargs) -> dict[str, Any]:
+    """Helper function for MCP tools with consistent async handling and persistence."""
+    client = ctx.request_context.lifespan_context["client"]
+    result = await asyncio.to_thread(client.call_mapped_method, method_name, **kwargs)
+    response_data = client.convert(result)
+    insert_document(method_name, {"response": response_data})
+    log_operation(method_name, "TOOL_CALL", kwargs, response_data)
+    return response_data
 ```
 
 ### Localized Business Logic
@@ -113,10 +124,12 @@ Use `docker-compose.yml` for full stack with MongoDB:
 docker-compose up --build
 ```
 
-### Adding New MCP Methods
-1. Add mapping to `SplitwiseClient.METHOD_MAP`
-2. Test via `/mcp/{method_name}` endpoint - no code changes needed
-3. Add REST endpoint in `main.py` if cached access is desired
+### Adding New MCP Tools
+1. Add mapping to `SplitwiseClient.METHOD_MAP` if not already present
+2. Add tool function in `app/mcp_server.py` with `@mcp.tool()` decorator
+3. Use `await _call_splitwise_method(ctx, "method_name", **args)` for Splitwise API calls
+4. Add tests to `tests/test_mcp_server.py`
+5. Add REST endpoint in `main.py` if cached access is desired
 
 ### Adding Custom Helpers
 1. Implement async function in `custom_methods.py` taking `SplitwiseClient` parameter  
@@ -129,10 +142,10 @@ docker-compose up --build
 1. Client calls `/groups` → `find_latest("list_groups")` → returns cached MongoDB data
 2. No Splitwise API calls for GET endpoints (pure cache reads)
 
-### Write Operations  
-1. Client calls `/mcp/create_expense` → `SplitwiseClient.call_mapped_method()` → Splitwise API
+### MCP Tool Operations  
+1. AI agent calls MCP tool → `_call_splitwise_method()` → `asyncio.to_thread()` → Splitwise API
 2. Response auto-persisted to MongoDB with timestamp
-3. Operation logged to `logs` collection
+3. Operation logged to `logs` collection with "TOOL_CALL" action type
 
 ### Custom Workflows
 1. Client calls `/custom/add_expense_equal_split` → business logic in `custom_methods.py`
@@ -152,6 +165,12 @@ docker-compose up --build
 - All documents include `timestamp` field for ordering
 - Separate `logs` collection for audit trail
 
+### MCP Server Integration
+- Official MCP SDK from modelcontextprotocol/python-sdk
+- FastMCP server mounted at `/mcp` path via Starlette mounting
+- Context injection provides access to SplitwiseClient via lifespan management
+- All MCP operations maintain database persistence and audit logging
+
 ### Docker Deployment
 - Multi-stage build with system dependencies for `pymongo` compilation
 - Service discovery via container names (`mongo:27017`)
@@ -162,8 +181,9 @@ docker-compose up --build
 ### Test Architecture
 The project includes comprehensive testing at multiple levels:
 
-- **Unit Tests** (`tests/`) - Mock-based testing of all modules (64 tests)
+- **Unit Tests** (`tests/`) - Mock-based testing of all modules (76 tests)
 - **Integration Tests** (`tests/integration/`) - End-to-end tests against live Splitwise API
+- **MCP Server Tests** (`tests/test_mcp_server.py`) - Comprehensive MCP tool and resource testing
 - **Test Coverage** - Comprehensive coverage reporting with pytest-cov
 
 ### Running Tests
@@ -273,6 +293,29 @@ with (
     # Test implementation
 ```
 
+**MCP Testing Patterns:**
+```python
+@pytest.fixture
+def mock_context(mock_splitwise_client):
+    """Mock MCP Context object."""
+    context = Mock()
+    context.request_context.lifespan_context = {"client": mock_splitwise_client}
+    return context
+
+@pytest.mark.asyncio
+async def test_mcp_tool(mock_context):
+    """Test MCP tool functionality."""
+    from app.mcp_server import my_tool
+    
+    with (
+        patch("app.mcp_server.asyncio.to_thread") as mock_to_thread,
+        patch("app.mcp_server.insert_document"),
+        patch("app.mcp_server.log_operation"),
+    ):
+        result = await my_tool("test_param", mock_context)
+        assert result == {"converted": "data"}
+```
+
 ### FastAPI Patterns
 **Route Definitions:**
 ```python
@@ -342,9 +385,39 @@ result = await asyncio.to_thread(client.call_mapped_method, method_name, **args)
 client: SplitwiseClient = request.app.state.client
 ```
 
+### MCP Development Patterns
+**Tool Implementation:**
+```python
+@mcp.tool()
+async def my_tool(param: str, ctx: Context) -> dict[str, Any]:
+    """Tool description for AI agents."""
+    return await _call_splitwise_method(ctx, "method_name", param=param)
+```
+
+**Resource Implementation:**
+```python
+@mcp.resource("splitwise://resource/{name}")
+async def my_resource(name: str, ctx: Context) -> str:
+    """Resource description."""
+    client = ctx.request_context.lifespan_context["client"]
+    result = client.some_method(name)
+    return str(client.convert(result))
+```
+
+**Lifespan Management:**
+```python
+@asynccontextmanager
+async def mcp_lifespan(server: Server):
+    """MCP server lifespan with SplitwiseClient initialization."""
+    # Setup code - initialize client
+    yield {"client": client}
+    # Cleanup code if needed
+```
+
 ### File Organization Standards
 **Module Structure:**
 - `app/main.py` - FastAPI app and route definitions only
+- `app/mcp_server.py` - MCP server implementation with tools and resources
 - `app/models.py` - Pydantic schemas only  
 - `app/splitwise_client.py` - SDK wrapper and method mapping
 - `app/custom_methods.py` - Business logic functions (async)

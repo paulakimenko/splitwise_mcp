@@ -6,24 +6,8 @@ from pydantic import ValidationError
 from app.models import (
     AddExpenseEqualSplitRequest,
     GenericResponse,
-    MCPCallRequest,
     MonthlyReportRequest,
 )
-
-
-class TestMCPCallRequest:
-    """Test MCPCallRequest model."""
-
-    def test_empty_args(self):
-        """Test creating request with empty args."""
-        request = MCPCallRequest()
-        assert request.args == {}
-
-    def test_with_args(self):
-        """Test creating request with args."""
-        args = {"param1": "value1", "param2": 123}
-        request = MCPCallRequest(args=args)
-        assert request.args == args
 
 
 class TestAddExpenseEqualSplitRequest:
