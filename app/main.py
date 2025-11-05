@@ -57,6 +57,31 @@ app.add_middleware(
 app.mount("/mcp", mcp.streamable_http_app())
 
 
+@app.get("/health", summary="Health check endpoint")
+async def health_check() -> dict[str, Any]:
+    """Health check endpoint with database connectivity status."""
+    health_status = {
+        "status": "healthy",
+        "service": "splitwise-mcp",
+        "database": "unknown",
+    }
+
+    # Check database connectivity
+    try:
+        from .db import get_db
+
+        db = get_db()
+        # Simple ping to test connectivity - get the MongoDB client and ping
+        client = db.client
+        client.admin.command("ping")
+        health_status["database"] = "connected"
+    except Exception as exc:
+        health_status["database"] = f"disconnected: {str(exc)}"
+        health_status["status"] = "degraded"
+
+    return health_status
+
+
 def get_client(request: Request) -> SplitwiseClient:
     """Dependency to obtain a SplitwiseClient instance stored in app state."""
     return request.app.state.client
@@ -70,10 +95,15 @@ def get_client(request: Request) -> SplitwiseClient:
     summary="Return the latest cached list of groups",
 )
 async def get_groups() -> Any:
-    doc = find_latest("list_groups")
-    if not doc:
-        return GenericResponse(message="No cached groups found", data=None)
-    return doc.get("response") or doc.get("data")
+    try:
+        doc = find_latest("list_groups")
+        if not doc:
+            return GenericResponse(message="No cached groups found", data=None)
+        return doc.get("response") or doc.get("data")
+    except Exception as exc:
+        return GenericResponse(
+            message=f"Database connection error: {str(exc)}", data=None
+        )
 
 
 @app.get(
@@ -81,10 +111,15 @@ async def get_groups() -> Any:
     summary="Return the latest cached list of expenses",
 )
 async def get_expenses() -> Any:
-    doc = find_latest("list_expenses")
-    if not doc:
-        return GenericResponse(message="No cached expenses found", data=None)
-    return doc.get("response") or doc.get("data")
+    try:
+        doc = find_latest("list_expenses")
+        if not doc:
+            return GenericResponse(message="No cached expenses found", data=None)
+        return doc.get("response") or doc.get("data")
+    except Exception as exc:
+        return GenericResponse(
+            message=f"Database connection error: {str(exc)}", data=None
+        )
 
 
 @app.get(
@@ -92,10 +127,15 @@ async def get_expenses() -> Any:
     summary="Return the latest cached list of friends",
 )
 async def get_friends() -> Any:
-    doc = find_latest("list_friends")
-    if not doc:
-        return GenericResponse(message="No cached friends found", data=None)
-    return doc.get("response") or doc.get("data")
+    try:
+        doc = find_latest("list_friends")
+        if not doc:
+            return GenericResponse(message="No cached friends found", data=None)
+        return doc.get("response") or doc.get("data")
+    except Exception as exc:
+        return GenericResponse(
+            message=f"Database connection error: {str(exc)}", data=None
+        )
 
 
 @app.get(
@@ -105,13 +145,18 @@ async def get_friends() -> Any:
 async def get_logs() -> Any:
     from .db import get_db
 
-    db = get_db()
-    logs = list(db["logs"].find().sort("timestamp", -1).limit(50))
-    # Convert ObjectId to string for JSON serialisation
-    for log in logs:
-        if "_id" in log:
-            log["_id"] = str(log["_id"])
-    return logs
+    try:
+        db = get_db()
+        logs = list(db["logs"].find().sort("timestamp", -1).limit(50))
+        # Convert ObjectId to string for JSON serialisation
+        for log in logs:
+            if "_id" in log:
+                log["_id"] = str(log["_id"])
+        return logs
+    except Exception as exc:
+        return GenericResponse(
+            message=f"Database connection error: {str(exc)}", data=[]
+        )
 
 
 # Custom helper endpoints

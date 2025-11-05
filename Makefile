@@ -7,6 +7,42 @@ help: ## Show this help message
 	@echo "Available commands:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
+# Docker Commands
+docker-build: ## Build Docker image for the application
+	@if [ -f .env ]; then set -o allexport; source .env; set +o allexport; fi && \
+	REGISTRY=$${DOCKER_REGISTRY:-paulakimenko} && \
+	IMAGE_NAME=$${DOCKER_IMAGE_NAME:-splitwise-mcp} && \
+	TAG=$${DOCKER_TAG:-latest} && \
+	echo "Building Docker image: $$REGISTRY/$$IMAGE_NAME:$$TAG" && \
+	docker build -t $$REGISTRY/$$IMAGE_NAME:$$TAG .
+
+docker-push: ## Push Docker image to registry
+	@if [ -f .env ]; then set -o allexport; source .env; set +o allexport; fi && \
+	REGISTRY=$${DOCKER_REGISTRY:-paulakimenko} && \
+	IMAGE_NAME=$${DOCKER_IMAGE_NAME:-splitwise-mcp} && \
+	TAG=$${DOCKER_TAG:-latest} && \
+	echo "Pushing Docker image: $$REGISTRY/$$IMAGE_NAME:$$TAG" && \
+	docker push $$REGISTRY/$$IMAGE_NAME:$$TAG
+
+docker-build-push: docker-build docker-push ## Build and push Docker image
+
+docker-run: ## Run Docker container locally (without database - limited functionality)
+	@if [ -f .env ]; then set -o allexport; source .env; set +o allexport; fi && \
+	REGISTRY=$${DOCKER_REGISTRY:-paulakimenko} && \
+	IMAGE_NAME=$${DOCKER_IMAGE_NAME:-splitwise-mcp} && \
+	TAG=$${DOCKER_TAG:-latest} && \
+	echo "⚠️  Running standalone container (no database) - limited functionality" && \
+	echo "💡 Use 'make docker-compose-up' for full functionality with MongoDB" && \
+	echo "Running Docker container: $$REGISTRY/$$IMAGE_NAME:$$TAG" && \
+	docker run --rm -p 8000:8000 --env-file .env $$REGISTRY/$$IMAGE_NAME:$$TAG
+
+docker-run-full: ## Run with docker-compose (recommended - includes MongoDB)
+	@echo "🚀 Starting full stack with MongoDB..." && \
+	make docker-compose-up && \
+	echo "✅ Service available at http://localhost:8000" && \
+	echo "📚 API docs at http://localhost:8000/docs" && \
+	echo "🔍 Health check: curl http://localhost:8000/health"
+
 # Docker Compose Commands
 docker-compose-build: ## Build Docker containers
 	docker-compose build --no-cache
