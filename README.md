@@ -6,8 +6,7 @@ API methods through a single service while persisting the received
 data into a MongoDB database, logging every request/response, and
 offering REST endpoints to retrieve the cached data.  Additionally we
 provide a set of higher‑level helper endpoints to handle common
-scenarios expressed in Ukrainian such as adding expenses evenly or
-generating monthly reports.
+scenarios such as adding expenses evenly or generating monthly reports.
 
 ## Features
 
@@ -30,11 +29,10 @@ generating monthly reports.
   triggering calls to Splitwise – useful for quick lookups or
   offline access.
 
-* ✅ **Custom helper methods** – based on the examples below the
-  server implements richer workflows such as evenly splitting an
-  expense with a specific user, generating category reports for a
-  month, modifying groups or expenses and optimising debt
-  distribution.
+* ✅ **Custom helper methods** – the server implements richer workflows 
+  such as evenly splitting an expense with a specific user, generating 
+  category reports for a month, modifying groups or expenses and 
+  optimising debt distribution.
 
 * ✅ **Dockerised** – the repository includes a `Dockerfile` and
   `docker-compose.yml` to simplify deployment.  The recommended
@@ -102,22 +100,22 @@ EasyPanel.
    deployed service.  Ensure HTTPS termination is handled by your
    provider or reverse proxy.
 
-## Custom Usage Examples (Ukrainian)
+## Custom Usage Examples
 
 The following examples demonstrate how the MCP server can fulfil
-common Splitwise scenarios in Ukrainian.  Replace `GROUP_NAME`,
-`USER_NAME`, etc. with real values:
+common Splitwise scenarios. Replace `GROUP_NAME`, `USER_NAME`, 
+etc. with real values:
 
-| Задача | Приклад виклику |
-|-------|----------------|
-| Додати витрату `AMOUNT CURRENCY` у групу `GROUP_NAME` порівну з `USER_NAME` з коментарем `COMMENT` | `POST /custom/add_expense_equal_split` з тілом `{ "group_name": "Подорож", "amount": 100, "currency_code": "UAH", "participant_name": "Іван", "description": "Вечеря" }` |
-| Показати витрати у групі за місяць | `GET /custom/expenses_by_month?group_name=Подорож&month=2025-10` |
-| Створити групу та додати користувача | `POST /custom/create_group` з тілом `{ "name": "Квартира", "user_email": "example@example.com" }` |
-| Вивести список активних груп | `GET /groups` |
-| Модифікувати групу (simplify_by_default) | `PATCH /custom/update_group` з тілом `{ "group_id": 12345, "simplify_by_default": true }` |
-| Змінити суму витрат на житло за місяць | `POST /custom/update_expense_amount_by_category` з тілом `{ "group_name": "Квартира", "month": "2025-10", "category": "rent", "new_amount": 3000 }` |
-| Розподілити витрату частинами | `POST /custom/split_expense_custom` з тілом `{ "group_name": "Квартира", "expense_name": "Комунальні", "participant_name": "Іван", "ratio": 3 }` |
-| Звіт за минулий місяць по категоріях | `GET /custom/monthly_report?group_name=Квартира&month=2025-09` |
+| Task | Example Call |
+|------|-------------|
+| Add expense `AMOUNT CURRENCY` to group `GROUP_NAME` split equally with `USER_NAME` with comment `COMMENT` | `POST /custom/add_expense_equal_split` with body `{ "group_name": "Trip", "amount": 100, "currency_code": "UAH", "participant_name": "John", "description": "Dinner" }` |
+| Show expenses in group for a month | `GET /custom/expenses_by_month?group_name=Trip&month=2025-10` |
+| Create group and add user | `POST /custom/create_group` with body `{ "name": "Apartment", "user_email": "example@example.com" }` |
+| List active groups | `GET /groups` |
+| Modify group (simplify_by_default) | `PATCH /custom/update_group` with body `{ "group_id": 12345, "simplify_by_default": true }` |
+| Change housing expense amount for a month | `POST /custom/update_expense_amount_by_category` with body `{ "group_name": "Apartment", "month": "2025-10", "category": "rent", "new_amount": 3000 }` |
+| Split expense with custom ratios | `POST /custom/split_expense_custom` with body `{ "group_name": "Apartment", "expense_name": "Utilities", "participant_name": "John", "ratio": 3 }` |
+| Category report for previous month | `GET /custom/monthly_report?group_name=Apartment&month=2025-09` |
 
 ## Contributing
 

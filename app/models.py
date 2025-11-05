@@ -17,11 +17,11 @@ class MCPCallRequest(BaseModel):
 
 
 class AddExpenseEqualSplitRequest(BaseModel):
-    group_name: str = Field(..., description="Назва групи")
-    amount: float = Field(..., description="Сума витрати")
-    currency_code: str = Field(..., description="Тривсимвольний код валюти, напр. UAH")
-    participant_name: str = Field(..., description="Ім'я іншого учасника")
-    description: str = Field(..., description="Коментар до витрати")
+    group_name: str = Field(..., description="Group name")
+    amount: float = Field(..., description="Expense amount")
+    currency_code: str = Field(..., description="Three-letter currency code, e.g. UAH")
+    participant_name: str = Field(..., description="Name of the other participant")
+    description: str = Field(..., description="Expense description")
 
     @validator("currency_code")
     def currency_upper(cls, v: str) -> str:  # noqa: N805

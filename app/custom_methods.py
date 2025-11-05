@@ -113,7 +113,7 @@ async def monthly_report(
     for cat_name, cost in category_totals.items():
         if total_cost > 0 and cost / total_cost > 0.5:
             recommendations.append(
-                f"Витрати у категорії '{cat_name}' перевищують 50% від загальної суми. Розгляньте можливість скорочення."
+                f"Expenses in category '{cat_name}' exceed 50% of total amount. Consider reducing spending in this area."
             )
     return {
         "summary": category_totals,

@@ -2,11 +2,11 @@
 
 ## Architecture Overview
 
-This is a **FastAPI-based MCP (Magic Control Panel) proxy service** that wraps the Splitwise API with caching, logging, and Ukrainian-localized helper endpoints. The service follows a three-layer architecture:
+This is a **FastAPI-based MCP (Magic Control Panel) proxy service** that wraps the Splitwise API with caching, logging, and localized helper endpoints. The service follows a three-layer architecture:
 
 1. **MCP Layer** (`/mcp/{method_name}`) - Generic proxy routes that map snake_case names to Splitwise SDK camelCase methods
 2. **REST Cache Layer** (`/groups`, `/expenses`, etc.) - Read-only endpoints serving cached MongoDB data
-3. **Custom Helpers** (`/custom/*`) - Ukrainian-localized business logic for common expense scenarios
+3. **Custom Helpers** (`/custom/*`) - Localized business logic for common expense scenarios
 
 ### Key Components
 
@@ -42,11 +42,11 @@ insert_document(method_name, {"response": response_data})  # Store in MongoDB
 log_operation(endpoint, method, params, response_data)  # Audit logging
 ```
 
-### Ukrainian Localization
-Custom endpoints serve Ukrainian business scenarios with Ukrainian field descriptions in Pydantic models:
+### Localized Business Logic
+Custom endpoints serve common business scenarios with descriptive field names in Pydantic models:
 ```python
-group_name: str = Field(..., description="Назва групи")
-amount: float = Field(..., description="Сума витрати")
+group_name: str = Field(..., description="Group name")
+amount: float = Field(..., description="Expense amount")
 ```
 
 ## Development Workflows
