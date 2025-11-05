@@ -36,7 +36,7 @@ class TestAddExpenseEqualSplitRequest:
             amount=100.50,
             currency_code="uah",
             participant_name="John Doe",
-            description="Test expense"
+            description="Test expense",
         )
         assert request.group_name == "Test Group"
         assert request.amount == 100.50
@@ -51,7 +51,7 @@ class TestAddExpenseEqualSplitRequest:
             amount=50.0,
             currency_code="usd",
             participant_name="Jane",
-            description="Test"
+            description="Test",
         )
         assert request.currency_code == "USD"
 
@@ -68,7 +68,7 @@ class TestAddExpenseEqualSplitRequest:
                 amount="invalid",
                 currency_code="USD",
                 participant_name="John",
-                description="Test"
+                description="Test",
             )
 
 
@@ -77,10 +77,7 @@ class TestMonthlyReportRequest:
 
     def test_valid_request(self):
         """Test creating valid monthly report request."""
-        request = MonthlyReportRequest(
-            group_name="Test Group",
-            month="2025-10"
-        )
+        request = MonthlyReportRequest(group_name="Test Group", month="2025-10")
         assert request.group_name == "Test Group"
         assert request.month == "2025-10"
 

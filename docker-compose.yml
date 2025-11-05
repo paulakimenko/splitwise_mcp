@@ -16,6 +16,8 @@ services:
       - mongo
     environment:
       - SPLITWISE_API_KEY=${SPLITWISE_API_KEY}
+      - SPLITWISE_CONSUMER_KEY=${SPLITWISE_CONSUMER_KEY}
+      - SPLITWISE_CONSUMER_SECRET=${SPLITWISE_CONSUMER_SECRET}
       - MONGO_URI=mongodb://mongo:27017
       - DB_NAME=${DB_NAME:-splitwise}
       - BASE_URL=${BASE_URL:-http://localhost:8000}

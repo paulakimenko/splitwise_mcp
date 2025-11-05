@@ -3,53 +3,53 @@
 from datetime import datetime
 from unittest.mock import MagicMock, Mock, patch
 
-import pytest
-
 from app.db import find_all, find_latest, get_client, get_db, insert_document
 
 
 class TestDatabaseConnection:
     """Test database connection functions."""
 
-    @patch('app.db.MongoClient')
+    @patch("app.db.MongoClient")
     def test_get_client_default_uri(self, mock_mongo_client):
         """Test getting client with default URI."""
-        with patch.dict('os.environ', {}, clear=True):
+        with patch.dict("os.environ", {}, clear=True):
             # Clear the global client to force new connection
             import app.db
+
             app.db._client = None
 
             get_client()
             mock_mongo_client.assert_called_once_with("mongodb://localhost:27017")
 
-    @patch('app.db.MongoClient')
+    @patch("app.db.MongoClient")
     def test_get_client_custom_uri(self, mock_mongo_client):
         """Test getting client with custom URI."""
-        with patch.dict('os.environ', {'MONGO_URI': 'mongodb://custom:27017'}):
+        with patch.dict("os.environ", {"MONGO_URI": "mongodb://custom:27017"}):
             # Clear the global client to force new connection
             import app.db
+
             app.db._client = None
 
             get_client()
             mock_mongo_client.assert_called_once_with("mongodb://custom:27017")
 
-    @patch('app.db.get_client')
+    @patch("app.db.get_client")
     def test_get_db_default_name(self, mock_get_client):
         """Test getting database with default name."""
         mock_client = MagicMock()
         mock_get_client.return_value = mock_client
 
-        with patch.dict('os.environ', {}, clear=True):
+        with patch.dict("os.environ", {}, clear=True):
             get_db()
             mock_client.__getitem__.assert_called_once_with("splitwise")
 
-    @patch('app.db.get_client')
+    @patch("app.db.get_client")
     def test_get_db_custom_name(self, mock_get_client):
         """Test getting database with custom name."""
         mock_client = MagicMock()
         mock_get_client.return_value = mock_client
 
-        with patch.dict('os.environ', {'DB_NAME': 'custom_db'}):
+        with patch.dict("os.environ", {"DB_NAME": "custom_db"}):
             get_db()
             mock_client.__getitem__.assert_called_once_with("custom_db")
 
@@ -57,7 +57,7 @@ class TestDatabaseConnection:
 class TestDatabaseOperations:
     """Test database operations."""
 
-    @patch('app.db.get_db')
+    @patch("app.db.get_db")
     def test_insert_document(self, mock_get_db):
         """Test inserting a document."""
         mock_db = MagicMock()
@@ -81,7 +81,7 @@ class TestDatabaseOperations:
         assert isinstance(inserted_doc["timestamp"], datetime)
         assert result == "test_id"
 
-    @patch('app.db.get_db')
+    @patch("app.db.get_db")
     def test_find_latest(self, mock_get_db):
         """Test finding latest document."""
         mock_db = MagicMock()
@@ -97,7 +97,7 @@ class TestDatabaseOperations:
         mock_collection.find_one.assert_called_once_with(sort=[("timestamp", -1)])
         assert result == expected_doc
 
-    @patch('app.db.get_db')
+    @patch("app.db.get_db")
     def test_find_latest_empty(self, mock_get_db):
         """Test finding latest document when collection is empty."""
         mock_db = MagicMock()
@@ -111,7 +111,7 @@ class TestDatabaseOperations:
 
         assert result is None
 
-    @patch('app.db.get_db')
+    @patch("app.db.get_db")
     def test_find_all_no_filter(self, mock_get_db):
         """Test finding all documents without filter."""
         mock_db = MagicMock()
@@ -127,7 +127,7 @@ class TestDatabaseOperations:
         mock_collection.find.assert_called_once_with({})
         assert result == expected_docs
 
-    @patch('app.db.get_db')
+    @patch("app.db.get_db")
     def test_find_all_with_filter(self, mock_get_db):
         """Test finding all documents with filter."""
         mock_db = MagicMock()

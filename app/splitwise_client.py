@@ -20,10 +20,9 @@ from .utils import object_to_dict
 class SplitwiseClient:
     """High‑level wrapper for the Splitwise API.
 
-    The client uses a personal API key (from environment variable
-    `SPLITWISE_API_KEY`) to authenticate.  Only the bearer‑token
-    authentication flow is currently supported.  If you need OAuth
-    consumer keys and secrets, extend this class accordingly.
+    The client supports both personal API key authentication and OAuth consumer credentials.
+    It first attempts personal API key authentication if available, then falls back to
+    OAuth consumer credentials.
     """
 
     # Mapping from external MCP method names (snake_case) to
@@ -43,14 +42,34 @@ class SplitwiseClient:
         "get_balance": "getCurrentUser",  # Not a direct method; see notes
     }
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        consumer_key: str | None = None,
+        consumer_secret: str | None = None,
+    ) -> None:
+        # Get credentials from parameters or environment
+        consumer_key = consumer_key or os.environ.get("SPLITWISE_CONSUMER_KEY")
+        consumer_secret = consumer_secret or os.environ.get("SPLITWISE_CONSUMER_SECRET")
         api_key = api_key or os.environ.get("SPLITWISE_API_KEY")
-        if not api_key:
-            raise ValueError("SPLITWISE_API_KEY environment variable not set")
-        # The Splitwise SDK accepts a personal access token directly
-        # (without consumer keys) by passing the token as the first
-        # argument.  See https://github.com/namaggarwal/splitwise#using-application-access-token
-        self._client = Splitwise(api_key)
+
+        if api_key:
+            # Use personal API key (preferred method)
+            # The Splitwise SDK v3.0.0+ requires consumer keys but supports personal access tokens
+            # by using empty consumer keys and passing the token as the api_key parameter.
+            self._client = Splitwise(
+                consumer_key="", consumer_secret="", api_key=api_key
+            )
+        elif consumer_key and consumer_secret:
+            # Use OAuth consumer credentials (requires additional access token setup)
+            self._client = Splitwise(
+                consumer_key=consumer_key, consumer_secret=consumer_secret
+            )
+        else:
+            raise ValueError(
+                "Either SPLITWISE_CONSUMER_KEY and SPLITWISE_CONSUMER_SECRET, "
+                "or SPLITWISE_API_KEY environment variables must be set"
+            )
 
     @property
     def raw_client(self) -> Splitwise:
@@ -113,7 +132,10 @@ class SplitwiseClient:
         members = getattr(group, "members", []) or getattr(group, "members_list", [])
         for member in members:
             full = f"{getattr(member, 'first_name', '')} {getattr(member, 'last_name', '')}".strip()
-            if participant_name == getattr(member, "first_name", None) or participant_name == full:
+            if (
+                participant_name == getattr(member, "first_name", None)
+                or participant_name == full
+            ):
                 return member
         return None
 

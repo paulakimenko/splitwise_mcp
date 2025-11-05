@@ -13,23 +13,85 @@ class TestSplitwiseClientInit:
 
     def test_init_with_api_key(self):
         """Test initialization with API key parameter."""
-        with patch('app.splitwise_client.Splitwise') as mock_splitwise:
+        with patch("app.splitwise_client.Splitwise") as mock_splitwise:
             client = SplitwiseClient(api_key="test_key")
-            mock_splitwise.assert_called_once_with("test_key")
+            mock_splitwise.assert_called_once_with(
+                consumer_key="", consumer_secret="", api_key="test_key"
+            )
             assert client.raw_client == mock_splitwise.return_value
 
-    def test_init_with_env_var(self):
-        """Test initialization with environment variable."""
-        with patch('app.splitwise_client.Splitwise') as mock_splitwise:
-            with patch.dict(os.environ, {'SPLITWISE_API_KEY': 'env_key'}):
-                client = SplitwiseClient()
-                mock_splitwise.assert_called_once_with("env_key")
+    def test_init_with_oauth_credentials(self):
+        """Test initialization with OAuth consumer credentials."""
+        with (
+            patch("app.splitwise_client.Splitwise") as mock_splitwise,
+            patch.dict(os.environ, {}, clear=True),
+        ):
+            client = SplitwiseClient(
+                consumer_key="test_consumer_key", consumer_secret="test_consumer_secret"
+            )
+            mock_splitwise.assert_called_once_with(
+                consumer_key="test_consumer_key", consumer_secret="test_consumer_secret"
+            )
+            assert client.raw_client == mock_splitwise.return_value
 
-    def test_init_without_api_key(self):
-        """Test initialization fails without API key."""
-        with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError, match="SPLITWISE_API_KEY environment variable not set"):
-                SplitwiseClient()
+    def test_init_with_env_var_api_key(self):
+        """Test initialization with API key environment variable."""
+        with (
+            patch("app.splitwise_client.Splitwise") as mock_splitwise,
+            patch.dict(os.environ, {"SPLITWISE_API_KEY": "env_key"}),
+        ):
+            SplitwiseClient()
+            mock_splitwise.assert_called_once_with(
+                consumer_key="", consumer_secret="", api_key="env_key"
+            )
+
+    def test_init_with_env_var_oauth(self):
+        """Test initialization with OAuth environment variables."""
+        with (
+            patch("app.splitwise_client.Splitwise") as mock_splitwise,
+            patch.dict(
+                os.environ,
+                {
+                    "SPLITWISE_CONSUMER_KEY": "env_consumer_key",
+                    "SPLITWISE_CONSUMER_SECRET": "env_consumer_secret",
+                },
+                clear=True,
+            ),
+        ):
+            SplitwiseClient()
+            mock_splitwise.assert_called_once_with(
+                consumer_key="env_consumer_key",
+                consumer_secret="env_consumer_secret",
+            )
+
+    def test_init_api_key_takes_priority(self):
+        """Test that API key takes priority over OAuth credentials when both are present."""
+        with (
+            patch("app.splitwise_client.Splitwise") as mock_splitwise,
+            patch.dict(
+                os.environ,
+                {
+                    "SPLITWISE_CONSUMER_KEY": "env_consumer_key",
+                    "SPLITWISE_CONSUMER_SECRET": "env_consumer_secret",
+                    "SPLITWISE_API_KEY": "env_api_key",
+                },
+            ),
+        ):
+            SplitwiseClient()
+            mock_splitwise.assert_called_once_with(
+                consumer_key="", consumer_secret="", api_key="env_api_key"
+            )
+
+    def test_init_without_credentials(self):
+        """Test initialization fails without any credentials."""
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            pytest.raises(
+                ValueError,
+                match="Either SPLITWISE_CONSUMER_KEY and SPLITWISE_CONSUMER_SECRET, or SPLITWISE_API_KEY environment variables must be set",
+            ),
+        ):
+            SplitwiseClient()
 
 
 class TestMethodMapping:
@@ -46,7 +108,10 @@ class TestMethodMapping:
 
     def test_call_mapped_method_with_kwargs(self, mock_splitwise_client):
         """Test calling mapped method with arguments."""
-        mock_splitwise_client._client.getGroup.return_value = {"id": 1, "name": "Test Group"}
+        mock_splitwise_client._client.getGroup.return_value = {
+            "id": 1,
+            "name": "Test Group",
+        }
 
         result = mock_splitwise_client.call_mapped_method("get_group", id=1)
 
@@ -63,7 +128,9 @@ class TestMethodMapping:
         # Remove the method from the mock
         del mock_splitwise_client._client.getGroups
 
-        with pytest.raises(AttributeError, match="Splitwise SDK has no method 'getGroups'"):
+        with pytest.raises(
+            AttributeError, match="Splitwise SDK has no method 'getGroups'"
+        ):
             mock_splitwise_client.call_mapped_method("list_groups")
 
 
@@ -105,7 +172,10 @@ class TestHelperMethods:
         mock_group2 = Mock()
         mock_group2.name = "Test Group"
 
-        mock_splitwise_client._client.getGroups.return_value = [mock_group1, mock_group2]
+        mock_splitwise_client._client.getGroups.return_value = [
+            mock_group1,
+            mock_group2,
+        ]
 
         result = mock_splitwise_client.get_group_by_name("Test Group")
 
@@ -180,7 +250,7 @@ class TestHelperMethods:
 
         assert result == mock_member
 
-    @patch('app.splitwise_client.object_to_dict')
+    @patch("app.splitwise_client.object_to_dict")
     def test_convert(self, mock_object_to_dict, mock_splitwise_client):
         """Test object conversion."""
         test_obj = {"test": "data"}

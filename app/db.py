@@ -9,7 +9,7 @@ blocking IO in a threadpool when declaring route handlers as async.
 from __future__ import annotations
 
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from pymongo import MongoClient
@@ -45,7 +45,7 @@ def insert_document(collection: str, document: dict[str, Any]) -> Any:
     Returns the inserted document's ID.
     """
     db = get_db()
-    document = {**document, "timestamp": datetime.utcnow()}
+    document = {**document, "timestamp": datetime.now(UTC)}
     result = db[collection].insert_one(document)
     return result.inserted_id
 
@@ -60,7 +60,9 @@ def find_latest(collection: str) -> dict[str, Any] | None:
     return db[collection].find_one(sort=[("timestamp", -1)])
 
 
-def find_all(collection: str, filter_query: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+def find_all(
+    collection: str, filter_query: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
     """Return all documents matching the filter from a collection.
 
     If `filter_query` is None, all documents are returned.  Note that

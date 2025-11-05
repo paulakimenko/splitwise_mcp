@@ -23,16 +23,49 @@ docker-compose-logs-tail: ## Show and follow logs from all services
 docker-compose-restart: ## Restart all services
 	docker-compose restart
 
+# Virtual Environment Setup
+venv: ## Create virtual environment
+	python -m venv .venv
+	@echo "Virtual environment created. Activate with: source .venv/bin/activate"
+
+venv-activate: ## Show activation command for virtual environment
+	@echo "To activate virtual environment, run: source .venv/bin/activate"
+
 # Development Commands
 install-dev: ## Install development dependencies
-	pip install -r requirements.txt
-	pip install -r requirements-dev.txt
+	@if [ ! -d ".venv" ]; then echo "Virtual environment not found. Run 'make venv' first."; exit 1; fi
+	.venv/bin/pip install --upgrade pip
+	.venv/bin/pip install -r requirements.txt
+	.venv/bin/pip install -r requirements-dev.txt
 
-unit-test:
-	.venv/bin/python -m pytest tests/ -v --tb=short
+unit-test: ## Run unit tests only
+	.venv/bin/python -m pytest tests/ -v --tb=short --ignore=tests/integration
+
+integration-test: ## Run integration tests (requires SPLITWISE_API_KEY)
+	@echo "Running integration tests against live Splitwise API..."
+	@echo "⚠️  This will create and delete a test group in your Splitwise account"
+	@if [ -f .env ]; then set -o allexport; source .env; set +o allexport; fi && \
+	if [ -z "$$SPLITWISE_API_KEY" ] && [ -z "$$SPLITWISE_CONSUMER_KEY" ]; then echo "Error: Either SPLITWISE_API_KEY or SPLITWISE_CONSUMER_KEY/SPLITWISE_CONSUMER_SECRET must be set"; exit 1; fi && \
+	.venv/bin/python -m pytest tests/integration/ -v --tb=short -s
+
+integration-test-docker: ## Run integration tests with Docker Compose (MongoDB + live API)
+	@echo "Starting MongoDB with Docker Compose..."
+	@docker-compose up -d mongo
+	@echo "Waiting for MongoDB to be ready..."
+	@sleep 5
+	@echo "Running integration tests against live Splitwise API with Docker MongoDB..."
+	@if [ -f .env ]; then set -o allexport; source .env; set +o allexport; fi && \
+	if [ -z "$$SPLITWISE_API_KEY" ] && [ -z "$$SPLITWISE_CONSUMER_KEY" ]; then echo "Error: Either SPLITWISE_API_KEY or SPLITWISE_CONSUMER_KEY/SPLITWISE_CONSUMER_SECRET must be set"; exit 1; fi && \
+	MONGO_URI=mongodb://localhost:27017 .venv/bin/python -m pytest tests/integration/ -v --tb=short -s
+	@echo "Stopping Docker Compose services..."
+	@docker-compose down
+
+test-all-local: ## Run unit tests and integration tests
+	$(MAKE) unit-test
+	$(MAKE) integration-test
 
 unit-test-coverage: ## Run unit tests with coverage report
-	.venv/bin/python -m pytest tests/ -v --tb=short --cov=app --cov-report=html --cov-report=term
+	.venv/bin/python -m pytest tests/ -v --tb=short --cov=app --cov-report=html --cov-report=term --ignore=tests/integration
 
 # Code Quality Commands
 lint: ## Run code linting with Ruff
@@ -52,9 +85,13 @@ check: format-check lint ## Run all code quality checks
 fix: format lint-fix ## Format code and fix linting issues
 
 # Combined Commands
-test-all: check unit-test ## Run all checks and tests
+test-all: check unit-test ## Run all checks and unit tests (no integration)
 
-ci: install-dev test-all ## Run full CI pipeline locally
+test-full: check unit-test integration-test ## Run all checks, unit tests, and integration tests
+
+ci: install-dev test-all ## Run full CI pipeline locally (unit tests only)
+
+ci-full: install-dev test-full ## Run full CI pipeline with integration tests
 
 # Environment Commands
 env-setup: ## Copy .env.example to .env if it doesn't exist
@@ -80,8 +117,10 @@ docker-dev: docker-compose-up ## Start development environment with Docker
 docker-dev-stop: docker-compose-down ## Stop development environment
 
 # Full development setup
-setup: install-dev env-setup ## Full development setup
+setup: venv install-dev env-setup ## Full development setup
 	@echo "Development environment setup complete!"
-	@echo "1. Update .env file with your API keys"
-	@echo "2. Run 'make dev' to start the development server"
-	@echo "3. Run 'make test-all' to run all tests and checks"
+	@echo "1. Activate virtual environment: source .venv/bin/activate"
+	@echo "2. Update .env file with your SPLITWISE_API_KEY"
+	@echo "3. Run 'make dev' to start the development server"
+	@echo "4. Run 'make test-all' to run unit tests and checks"
+	@echo "5. Run 'make integration-test' to run integration tests (requires API key)"
