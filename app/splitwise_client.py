@@ -20,9 +20,9 @@ from .utils import object_to_dict
 class SplitwiseClient:
     """High‑level wrapper for the Splitwise API.
 
-    The client supports both OAuth consumer credentials and personal API key authentication.
-    It first attempts OAuth if consumer key/secret are available, then falls back to
-    personal API key authentication.
+    The client supports both personal API key authentication and OAuth consumer credentials.
+    It first attempts personal API key authentication if available, then falls back to
+    OAuth consumer credentials.
     """
 
     # Mapping from external MCP method names (snake_case) to
