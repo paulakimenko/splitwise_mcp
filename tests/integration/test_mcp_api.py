@@ -4,7 +4,6 @@ These tests validate the MCP proxy functionality by making real API calls
 to Splitwise through our service endpoints.
 """
 
-import pytest
 from fastapi.testclient import TestClient
 
 
