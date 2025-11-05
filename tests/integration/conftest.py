@@ -77,8 +77,8 @@ def test_group_id(splitwise_client: SplitwiseClient, test_group_name: str):
                 print(f"Cleaned up test group '{test_group_name}' (ID: {group_id})")
             except Exception as e:
                 print(f"Warning: Failed to delete test group {group_id}: {e}")
-            else:
-                print("Warning: Could not clean up test group (group creation failed)")
+        else:
+            print("Warning: Could not clean up test group (group creation failed)")
 
 
 @pytest.fixture(scope="session")
