@@ -16,8 +16,9 @@ services:
     container_name: splitwise_mcp_server
     depends_on:
       - mongo
-    ports:
-      - "8000:8000"
+    # Don't expose port directly - nginx will proxy to it
+    # ports:
+    #   - "8000:8000"
     environment:
       - SPLITWISE_API_KEY=${SPLITWISE_API_KEY}
       - SPLITWISE_CONSUMER_KEY=${SPLITWISE_CONSUMER_KEY}
@@ -29,6 +30,19 @@ services:
       - MCP_PORT=8000
     volumes:
       - .:/app:ro
+
+  # nginx reverse proxy to fix FastMCP's 406 response for GET requests
+  # Workaround: Returns 405 Method Not Allowed (MCP-compliant) instead of 406
+  nginx:
+    image: nginx:alpine
+    container_name: splitwise_nginx
+    depends_on:
+      - splitwise-mcp
+    ports:
+      - "8000:80"  # Expose nginx on port 8000 instead of FastMCP directly
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    restart: unless-stopped
 
 volumes:
   mongo_data:

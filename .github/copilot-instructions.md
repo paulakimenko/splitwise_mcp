@@ -1,156 +1,84 @@
 # Splitwise MCP Service - Developer Instructions
 
-## Architecture Overview
+## Quick Start Essentials
 
-This is a **pure Model Context Protocol (MCP) server** built with the official Python MCP SDK (FastMCP) that integrates the Splitwise API for AI agents. The service provides MCP tools for expense management operations and resources for data access.
+This is a **pure MCP server** (FastMCP) that wraps the Splitwise API for AI agents. The architecture uses **async-over-sync** patterns since the Splitwise SDK is synchronous, and employs **method mapping** to bridge MCP's snake_case conventions with the SDK's camelCase methods.
 
-### MCP SDK Reference
+### Critical Architecture Decisions
 
-**For complete MCP SDK documentation, patterns, and best practices:**
+**1. ChatGPT Connector Requirements (MANDATORY)**
+- **Problem**: ChatGPT connectors REQUIRE exactly two specific tools: `search` and `fetch`
+- **Solution**: Added `search` tool (returns list of results with id/title/url) and `fetch` tool (returns full document with id/title/text/url/metadata)
+- **Impact**: Without these tools, connector won't appear in ChatGPT despite passing all MCP compliance checks
+- **Files**: `app/main.py` (search/fetch implementations), tests in `test_mcp_pure.py`
+- **Spec**: [ChatGPT MCP Building Guide](https://platform.openai.com/docs/guides/tools-connectors-mcp)
 
-📋 **[Official MCP Python SDK Documentation](docs-for-copilot/MCP_SDK_README.md)**
+**2. Nginx Reverse Proxy (Production Deployment)**
+- **Problem**: FastMCP returns HTTP 406 for GET requests to `/mcp`, violating MCP spec (expects 405)
+- **Solution**: `nginx.conf` intercepts GET requests, returns proper 405 before FastMCP sees them
+- **Impact**: Without nginx, ChatGPT and other MCP clients fail during capability negotiation
+- **Files**: `docker-compose.yml` (nginx service), `nginx.conf` (405 workaround)
 
-The official SDK documentation covers:
-- FastMCP server architecture and lifecycle management  
-- Tools, Resources, and Prompts implementation patterns
-- Context injection and lifespan management
-- Authentication and authorization
-- Client development and integration
-- Transport options (stdio, StreamableHTTP, SSE)
-- Advanced features like structured output and pagination
+**3. Dual Transport Support**
+- **Local Dev**: `stdio` transport (default) - MCP protocol over stdin/stdout
+- **Remote/Docker**: `streamable-http` transport - HTTP server on port 8000 at `/mcp` endpoint
+- **Switch**: Set `MCP_TRANSPORT=streamable-http` environment variable
+- **Why**: stdio for local testing, HTTP for ChatGPT integration and remote clients
 
-### MCP Integration Guides
+**4. MongoDB Graceful Degradation**
+- All operations attempt database persistence but **never fail** if MongoDB is unavailable
+- Pattern: `try: insert_document(...) except Exception: logging.warning(...)`
+- Enables testing without MongoDB while maintaining audit trail in production
 
-**For integrating MCP servers with AI platforms and implementing OAuth authorization:**
-
-📋 **[ChatGPT MCP Integration Guide](docs-for-copilot/CHAT_GPT_BUILDING_MCP.md)**
-
-This guide covers building MCP servers specifically for ChatGPT integration:
-- Implementing required `search` and `fetch` tools for ChatGPT connectors
-- Tool response formats and content structures
-- Deep research integration patterns
-- Testing with ChatGPT prompts dashboard
-- Security and authentication considerations
-- Prompt injection risks and mitigation strategies
-
-📋 **[MCP OAuth Authorization Specification](docs-for-copilot/AUTH_MCP.md)**
-
-Complete OAuth 2.1 authorization implementation for MCP servers:
-- OAuth 2.1 authorization flow with PKCE
-- Dynamic client registration (RFC7591)
-- Authorization server metadata discovery (RFC8414)
-- Token handling and security requirements
-- Public vs confidential client patterns
-- Session binding and third-party authorization flows
-
-### Architecture Components
-
-The pure MCP implementation provides:
-
-### Key Components
-
-- **`app/mcp_server.py`** - Pure MCP FastMCP server with tools, resources, and lifespan management
-- **`app/splitwise_client.py`** - Wrapper around `splitwise` SDK with method mapping and data conversion  
-- **`app/custom_methods.py`** - Higher-level business logic (expense filtering, reports)
-- **`app/db.py`** - MongoDB utilities with timestamp-based document insertion
-- **`app/utils.py`** - Utility functions for object serialization and data conversion
-- **`app/logging_utils.py`** - Logging helpers for operation tracking and audit trails
-
-### Splitwise API Reference
-
-**For all Splitwise domain model, API endpoints, data structures, and integration questions, refer to the complete OpenAPI specification:**
-
-📋 **[Splitwise OpenAPI 3.0 Specification](docs-for-copilot/splitwise-openapi.json)**
-
-This specification includes:
-- Complete API endpoint definitions and parameters
-- Request/response schemas for all data structures (User, Group, Expense, etc.)
-- Authentication methods (OAuth2, API Key)
-- Field descriptions, validation rules, and examples
-- Business logic constraints and relationships
-- Error response formats and status codes
-
-Use this reference when:
-- Understanding Splitwise data models (expenses, groups, users, friends)
-- Implementing new MCP tools or REST endpoints
-- Validating API parameters and response formats
-- Debugging integration issues or data mapping
-- Adding new features that interact with Splitwise APIs
-
-## Use Cases & Examples
-
-**For comprehensive real-world usage scenarios and implementation patterns, see:**
-
-📋 **[Use Case Examples](docs-for-copilot/use-cases.md)**
-
-This document provides 42 detailed examples covering common Splitwise operations:
-
-**Basic Operations:**
-- Add expenses with equal splits or custom shares
-- Create groups and manage memberships
-- Track expenses and generate reports
-
-**Advanced Workflows:**
-- Multi-currency expense conversion
-- Batch expense operations
-- Debt settlement optimization
-- Category-based expense filtering
-
-**Reporting & Analytics:**
-- Monthly and quarterly expense reports
-- Cross-group spending analysis
-- Outstanding balance calculations
-- Trend analysis and recommendations
-
-**Data Management:**
-- Export expense data to CSV/tables
-- Search expenses by keywords or criteria
-- Bulk operations on multiple expenses
-- Archive and restore groups
-
-These examples demonstrate how to combine MCP tools, REST endpoints, and custom helpers to build complete expense management workflows. Each use case includes the specific API calls, data structures, and business logic patterns needed for implementation.
-
-## Critical Patterns
-
-### Method Mapping Pattern
-The core MCP functionality uses `SplitwiseClient.METHOD_MAP` to translate external snake_case names to SDK camelCase methods:
+**5. Method Mapping Bridge**
 ```python
+# app/splitwise_client.py - Core translation layer
 METHOD_MAP = {
-    "list_groups": "getGroups",
-    "get_expense": "getExpense",
-    # ... maps external API to internal SDK
+    "list_groups": "getGroups",      # MCP snake_case → SDK camelCase
+    "create_expense": "createExpense",
+    # ... 20+ method mappings
 }
 ```
 
-### Async-over-Sync Pattern  
-Splitwise SDK is synchronous, so use `asyncio.to_thread()` for all SDK calls:
-```python
-result = await asyncio.to_thread(client.call_mapped_method, method_name, **args)
+## Essential References
+
+📋 **[MCP Python SDK Docs](docs-for-copilot/MCP_SDK_README.md)** - FastMCP patterns, context injection, transport options
+📋 **[ChatGPT MCP Integration](docs-for-copilot/CHAT_GPT_BUILDING_MCP.md)** - Required `search`/`fetch` tools, testing, security
+📋 **[OAuth 2.1 Spec](docs-for-copilot/AUTH_MCP.md)** - Authorization flows, PKCE, dynamic client registration  
+📋 **[Splitwise OpenAPI](docs-for-copilot/splitwise-openapi.json)** - Complete API reference, data models, parameters
+📋 **[Use Case Examples](docs-for-copilot/use-cases.md)** - 42 real-world expense workflows and patterns
+
+## Key Components & Data Flow
+
+```
+MCP Client → [nginx:80] → [FastMCP:8000] → SplitwiseClient → Splitwise API
+                ↓              ↓                                      ↓
+           405 on GET    Async Wrapper                          SDK (sync)
+                          ↓                                          ↓
+                    MongoDB (graceful)                      object_to_dict()
 ```
 
-### MCP Tool Pattern
-All MCP tools use the `_call_splitwise_tool` helper for consistent async operations and persistence:
-```python
-@mcp.tool()
-async def get_current_user(ctx: Context) -> dict[str, Any]:
-    """Get current authenticated user information."""
-    return await _call_splitwise_tool(ctx, "get_current_user")
+**`app/main.py`** - Entry point with transport detection, no FastAPI (pure MCP)
+**`app/splitwise_client.py`** - METHOD_MAP bridge + SDK wrapper + helper methods (`get_group_by_name`, etc.)
+**`app/custom_methods.py`** - Business logic: `expenses_by_month`, `monthly_report` (async, takes SplitwiseClient)
+**`app/db.py`** - MongoDB ops with graceful failure: `insert_document`, `find_latest`, `find_all`
+**`app/utils.py`** - `object_to_dict()` for SDK→JSON, `month_range()` for date filtering
 
-async def _call_splitwise_tool(ctx: Context, method_name: str, **kwargs) -> dict[str, Any]:
-    """Helper function for MCP tools with consistent async handling and persistence."""
-    client = ctx.request_context.lifespan_context["client"]
-    result = await asyncio.to_thread(client.call_mapped_method, method_name, **kwargs)
-    response_data = client.convert(result)
-    insert_document(method_name, {"response": response_data})
-    log_operation(method_name, "TOOL_CALL", kwargs, response_data)
+### MCP Tool/Resource Pattern
+```python
+# All tools use this helper for consistency
+async def _call_splitwise_tool(ctx: Context, method_name: str, **kwargs) -> dict:
+    client = ctx.request_context.lifespan_context["client"]  # From lifespan mgmt
+    result = await asyncio.to_thread(client.call_mapped_method, method_name, **kwargs)  # Async wrapper
+    response_data = client.convert(result)  # SDK objects → dict
+    insert_document(method_name, {"response": response_data})  # Persist (graceful)
+    log_operation(method_name, "TOOL_CALL", kwargs, response_data)  # Audit trail
     return response_data
-```
 
-### Localized Business Logic
-Custom methods serve common business scenarios with descriptive field names in Pydantic models:
-```python
-group_name: str = Field(..., description="Group name")
-amount: float = Field(..., description="Expense amount")
+# Example tool
+@mcp.tool()
+async def create_expense(cost: str, description: str, ctx: Context, **kwargs) -> dict:
+    return await _call_splitwise_tool(ctx, "create_expense", cost=cost, description=description, **kwargs)
 ```
 
 ## Development Workflows
@@ -217,7 +145,7 @@ cp .env.example .env
 # Edit .env and add your SPLITWISE_API_KEY
 
 # Start development server  
-python -m app.mcp_server  # Pure MCP server via stdio
+python -m app.main  # Pure MCP server via stdio
 ```
 
 ### Docker Development
@@ -234,178 +162,14 @@ docker-compose up --build
 
 ### Adding New MCP Tools
 1. Add mapping to `SplitwiseClient.METHOD_MAP` if not already present
-2. Add tool function in `app/mcp_server.py` with `@mcp.tool()` decorator
+2. Add tool function in `app/main.py` with `@mcp.tool()` decorator
 3. Use `await _call_splitwise_tool(ctx, "method_name", **args)` for Splitwise API calls
-4. Add tests to `tests/test_mcp_server.py`
+4. Add tests to `tests/test_mcp_pure.py`
 
 ### Adding Custom Helpers
 1. Implement async function in `custom_methods.py` taking `SplitwiseClient` parameter  
-2. Add MCP tool in `mcp_server.py` that calls the custom method
+2. Add MCP tool in `main.py` that calls the custom method
 3. Create Pydantic model in `models.py` if complex parameter validation needed
-
-## Streamable HTTP Transport (Required for Remote Operation)
-
-The MCP server **requires Streamable HTTP transport** for remote operation and Docker deployment, enabling MCP clients to connect over HTTP from any machine.
-
-### Configuration
-The server automatically detects transport mode via environment variables:
-- `MCP_TRANSPORT=streamable-http` - Enables HTTP transport (required for Docker)
-- `MCP_HOST=0.0.0.0` - Binds to all interfaces for remote access
-- `MCP_PORT=8000` - HTTP server port (exposed by Docker)
-
-### Client Connection
-Remote MCP clients connect to: `http://localhost:8000/mcp`
-
-### Local vs. Remote Operation
-- **Local Development**: Uses `stdio` transport by default
-- **Docker/Remote**: Uses `streamable-http` transport for network access
-- **Production**: Streamable HTTP enables multi-client access and load balancing
-
-### Environment Detection
-```python
-# Server automatically chooses transport based on MCP_TRANSPORT environment
-transport = os.environ.get("MCP_TRANSPORT", "stdio")
-if transport == "streamable-http":
-    mcp.run(transport="streamable-http", host="0.0.0.0", port=8000)
-else:
-    mcp.run()  # stdio transport
-```
-
-## ChatGPT & AI Platform Integration
-
-### ChatGPT Connector Setup
-
-**For detailed ChatGPT integration instructions, see:**  
-📋 **[ChatGPT MCP Integration Guide](docs-for-copilot/CHAT_GPT_BUILDING_MCP.md)**
-
-To integrate with ChatGPT as a custom connector:
-
-1. **Deploy Server with HTTP Transport**:
-   - Must use Streamable HTTP transport (not stdio)
-   - Server must be publicly accessible (e.g., `https://your-domain.com/mcp`)
-   - Configure with `MCP_TRANSPORT=streamable-http`
-
-2. **Implement Required Tools** (for ChatGPT connectors):
-   - `search` tool - Returns search results with `id`, `title`, `url` fields
-   - `fetch` tool - Retrieves full content by ID
-   - Both tools return MCP `TextContent` with JSON-encoded data
-   - See ChatGPT integration guide for exact response format
-
-3. **Configure in ChatGPT**:
-   - Add connector URL in ChatGPT settings → Connectors
-   - Enable for "Deep Research" and "Use Connectors"
-   - Test with prompts that trigger your MCP tools
-
-### Authentication for Production
-
-**For OAuth 2.1 implementation details, see:**  
-📋 **[MCP OAuth Authorization Specification](docs-for-copilot/AUTH_MCP.md)**
-
-Production deployments should implement OAuth authorization:
-
-1. **Authorization Server Setup**:
-   - Implement OAuth 2.1 with PKCE (recommended)
-   - Support dynamic client registration (RFC7591)
-   - Provide authorization server metadata (RFC8414)
-   - Default endpoints: `/authorize`, `/token`, `/register`
-
-2. **Token Requirements**:
-   - All HTTP requests must include: `Authorization: Bearer <token>`
-   - Return HTTP 401 for unauthorized requests
-   - Validate tokens on every request
-   - Support token refresh flow
-
-3. **Security Best Practices**:
-   - Use HTTPS in production
-   - Implement CORS for browser-based clients
-   - Expose `Mcp-Session-Id` header for session management
-   - Follow OAuth 2.1 security guidelines
-
-### Testing Remote Deployment
-
-Use the provided test scripts in `scripts/`:
-
-```bash
-# Test remote MCP server connectivity
-python scripts/test_remote_mcp.py
-
-# Test local HTTP MCP server
-python scripts/test_http_request.py
-```
-
-These scripts verify:
-- Server is reachable and returning 200 OK (not 503)
-- Session ID is present in response headers
-- MCP protocol initialization works
-- Tools can be listed and called successfully
-The server automatically detects transport mode via environment variables:
-- `MCP_TRANSPORT=streamable-http` - Enables HTTP transport (required for Docker)
-- `MCP_HOST=0.0.0.0` - Binds to all interfaces for remote access
-- `MCP_PORT=8000` - HTTP server port (exposed by Docker)
-
-### Client Connection
-Remote MCP clients connect to: `http://localhost:8000/mcp`
-
-### Local vs. Remote Operation
-- **Local Development**: Uses `stdio` transport by default
-- **Docker/Remote**: Uses `streamable-http` transport for network access
-- **Production**: Streamable HTTP enables multi-client access and load balancing
-
-### Environment Detection
-```python
-# Server automatically chooses transport based on MCP_TRANSPORT environment
-transport = os.environ.get("MCP_TRANSPORT", "stdio")
-if transport == "streamable-http":
-    mcp.run(transport="streamable-http", host="0.0.0.0", port=8000)
-else:
-    mcp.run()  # stdio transport
-```
-
-## Data Flow Patterns
-
-### Read Operations
-1. Client calls `/groups` → `find_latest("list_groups")` → returns cached MongoDB data
-2. No Splitwise API calls for GET endpoints (pure cache reads)
-
-### MCP Tool Operations  
-1. AI agent calls MCP tool → `_call_splitwise_tool()` → `asyncio.to_thread()` → Splitwise API
-2. Response auto-persisted to MongoDB with timestamp
-3. Operation logged to `logs` collection with "TOOL_CALL" action type
-
-### Custom Workflows
-1. Client calls `/custom/add_expense_equal_split` → business logic in `custom_methods.py`
-2. Uses `SplitwiseClient` helpers like `get_group_by_name()`, `get_user_from_group()`  
-3. Constructs SDK objects (`Expense`, `ExpenseUser`) manually
-4. Persists results following standard pattern
-
-## Key Integration Points
-
-### Splitwise SDK Integration
-- Uses bearer token authentication (personal API key)
-- All complex SDK objects converted via `client.convert()` using `utils.object_to_dict()`
-- Group/user lookups use name-based helpers rather than IDs
-
-### MongoDB Integration
-- Collections named after MCP method names (`list_groups`, `create_expense`, etc.)
-- All documents include `timestamp` field for ordering
-- Separate `logs` collection for audit trail
-
-### MCP Server Integration
-- Official MCP SDK from modelcontextprotocol/python-sdk
-- FastMCP server mounted at `/mcp` path via Starlette mounting
-- Context injection provides access to SplitwiseClient via lifespan management
-- All MCP operations maintain database persistence and audit logging
-
-### Docker Deployment
-- **Pre-built Image**: `paulakimenko/splitwise-mcp:latest` available on Docker Hub
-- **Transport Mode**: Uses **Streamable HTTP transport** for remote operation in Docker
-- **Network Access**: Exposed on port `8000` at endpoint `http://localhost:8000/mcp`
-- **Build Process**: Multi-stage build with system dependencies for `pymongo` compilation
-- **Registry Configuration**: Set `DOCKER_REGISTRY`, `DOCKER_IMAGE_NAME`, `DOCKER_TAG` in `.env`
-- **Service Discovery**: Container names (`mongo:27017`) for docker-compose
-- **Remote Client Support**: MCP clients can connect from any machine using HTTP transport
-- **Development**: Volume mount for development (`./:/app:ro`)
-- **Makefile Commands**: `make docker-build`, `make docker-push`, `make docker-build-push`
 
 ## Testing & Debugging
 
@@ -414,7 +178,7 @@ The project includes comprehensive testing at multiple levels:
 
 - **Unit Tests** (`tests/`) - Mock-based testing of all modules (76 tests)
 - **Integration Tests** (`tests/integration/`) - End-to-end tests against live Splitwise API
-- **MCP Server Tests** (`tests/test_mcp_server.py`) - Comprehensive MCP tool and resource testing
+- **MCP Server Tests** (`tests/test_mcp_pure.py`) - Comprehensive MCP tool and resource testing
 - **Test Coverage** - Comprehensive coverage reporting with pytest-cov
 
 ### Running Tests
@@ -445,7 +209,7 @@ Integration tests create a temporary test group in your Splitwise account:
 - **pytest** - Test framework with asyncio support
 
 ### Development Tools
-- **MCP Inspector**: `uv run mcp dev app.mcp_server` for interactive testing
+- **MCP Inspector**: `uv run mcp dev app.main` for interactive testing
 - **Stdio Communication**: Direct MCP protocol via stdin/stdout
 - **Database Logging**: All operations logged to MongoDB with timestamps
 - **Error Patterns**: MCP protocol errors, SDK validation errors, Splitwise API errors
@@ -536,12 +300,12 @@ def mock_context(mock_splitwise_client):
 @pytest.mark.asyncio
 async def test_mcp_tool(mock_context):
     """Test MCP tool functionality."""
-    from app.mcp_server import my_tool
+    from app.main import my_tool
     
     with (
-        patch("app.mcp_server.asyncio.to_thread") as mock_to_thread,
-        patch("app.mcp_server.insert_document"),
-        patch("app.mcp_server.log_operation"),
+        patch("app.main.asyncio.to_thread") as mock_to_thread,
+        patch("app.main.insert_document"),
+        patch("app.main.log_operation"),
     ):
         result = await my_tool("test_param", mock_context)
         assert result == {"converted": "data"}
@@ -613,39 +377,9 @@ result = await asyncio.to_thread(client.call_mapped_method, method_name, **args)
 client: SplitwiseClient = request.app.state.client
 ```
 
-### MCP Development Patterns
-**Tool Implementation:**
-```python
-@mcp.tool()
-async def my_tool(param: str, ctx: Context) -> dict[str, Any]:
-    """Tool description for AI agents."""
-    return await _call_splitwise_method(ctx, "method_name", param=param)
-```
-
-**Resource Implementation:**
-```python
-@mcp.resource("splitwise://resource/{name}")
-async def my_resource(name: str, ctx: Context) -> str:
-    """Resource description."""
-    client = ctx.request_context.lifespan_context["client"]
-    result = client.some_method(name)
-    return str(client.convert(result))
-```
-
-**Lifespan Management:**
-```python
-@asynccontextmanager
-async def mcp_lifespan(server: Server):
-    """MCP server lifespan with SplitwiseClient initialization."""
-    # Setup code - initialize client
-    yield {"client": client}
-    # Cleanup code if needed
-```
-
 ### File Organization Standards
 **Module Structure:**
-- `app/main.py` - FastAPI app and route definitions only
-- `app/mcp_server.py` - MCP server implementation with tools and resources
+- `app/main.py` - Entry point and MCP server implementation
 - `app/models.py` - Pydantic schemas only  
 - `app/splitwise_client.py` - SDK wrapper and method mapping
 - `app/custom_methods.py` - Business logic functions (async)
