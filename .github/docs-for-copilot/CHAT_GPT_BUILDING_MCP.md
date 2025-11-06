@@ -751,47 +751,6 @@ Once you have configured your MCP server, you can chat with a model using it via
 You can test the MCP server using the Responses API directly with a request like this one:
 
 ```bash
-1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23
-24
-25
-26
-27
-28
-29
-30
-31
-32
-33
-34
-35
-36
-37
-38
-39
-40
-41
 curl https://api.openai.com/v1/responses \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $OPENAI_API_KEY" \
@@ -847,6 +806,188 @@ If you connect your custom remote MCP server in ChatGPT, users in your workspace
 2.  Connect your server in the **Connectors** tab. It should now be visible in the composer's "Deep Research" and "Use Connectors" tools. You may have to add the server as a source.
 3.  Test your server by running some prompts.
 
+## Troubleshooting and Debugging
+
+If your MCP server isn't appearing in ChatGPT or you're getting connection errors like "Failed to build actions from MCP endpoint," follow these debugging steps to diagnose and fix the issue.
+
+### Common HTTP Status Codes
+
+- **406 Not Acceptable**: Your server is rejecting the `Accept` header that ChatGPT sends. The MCP HTTP transport requires servers to accept both `application/json` and `text/event-stream`.
+- **405 Method Not Allowed**: The endpoint doesn't support the required HTTP methods. MCP requires POST for JSON-RPC calls and optionally GET for SSE.
+- **404 Not Found**: The MCP endpoint path is incorrect or the server isn't routing requests properly.
+
+### MCP Protocol Requirements
+
+The MCP HTTP transport requires a **single `/mcp` endpoint** that supports:
+
+1. **POST** requests for JSON-RPC calls
+2. **GET** requests (optional) for Server-Sent Events (SSE)
+
+On GET requests, the server should either:
+- Return an SSE stream with `Content-Type: text/event-stream`, **OR**
+- Return **405 Method Not Allowed** (if SSE is not supported)
+
+**Important**: Never return 406 Not Acceptable when the client sends `Accept: text/event-stream`. ChatGPT may consider this non-compliant behavior.
+
+### Verify Server Compliance with curl
+
+Run these commands to test your server's MCP protocol compliance. No authentication is needed for these basic checks.
+
+#### 1. Initialize (Capability Negotiation)
+
+```bash
+curl -sS -X POST https://your-server.com/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":1,
+    "method":"initialize",
+    "params":{
+      "protocolVersion":"2024-11-05",
+      "capabilities":{"roots":{},"sampling":{}},
+      "clientInfo":{"name":"curl","version":"1.0"}
+    }
+  }'
+```
+
+**Expected Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "protocolVersion": "2024-11-05",
+    "capabilities": {
+      "tools": {},
+      "resources": {},
+      "prompts": {}
+    },
+    "serverInfo": {
+      "name": "Your Server Name",
+      "version": "1.0.0"
+    }
+  }
+}
+```
+
+**Key Requirements:**
+- Must return a valid JSON-RPC response with `result` field
+- Must declare server capabilities (even if empty)
+- Should include `Mcp-Session-Id` header for stateful connections
+
+#### 2. List Tools (Must Return at Least One Tool)
+
+```bash
+curl -sS -X POST https://your-server.com/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":2,
+    "method":"tools/list",
+    "params":{}
+  }'
+```
+
+**Expected Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "tools": [
+      {
+        "name": "search",
+        "description": "Search for documents",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {"type": "string"}
+          },
+          "required": ["query"]
+        }
+      }
+    ]
+  }
+}
+```
+
+**Key Requirements:**
+- `tools` array must not be empty
+- Each tool must have: `name`, `description`, and `inputSchema`
+- `inputSchema` must be a valid JSON Schema object
+
+#### 3. Optional SSE Check (GET Request)
+
+```bash
+curl -i -H 'Accept: text/event-stream' https://your-server.com/mcp
+```
+
+**Expected Responses:**
+- **If SSE is supported**: HTTP 200 with `Content-Type: text/event-stream`
+- **If SSE is not supported**: HTTP 405 Method Not Allowed
+- **Never return**: HTTP 406 Not Acceptable
+
+### ChatGPT Client Requirements
+
+1. **Developer Mode** must be enabled:
+   - Go to **Settings → Connectors → Advanced**
+   - Enable **Developer mode**
+   - Without this, custom MCP servers won't appear
+
+2. **Refresh the connector** after fixing issues:
+   - Open **Settings → Connectors**
+   - Click on your connector
+   - Click **Refresh** to pull the latest tool metadata
+
+### Common Gotchas That Hide the Connector
+
+1. **Server doesn't declare the `tools` capability**
+   - The `initialize` response must include a `capabilities` object
+   - ChatGPT assumes "no tools" if capabilities are missing
+
+2. **`tools/list` returns an empty array or wrong schema**
+   - Required fields per MCP spec: `name`, `description`, `inputSchema`
+   - ChatGPT won't show a connector with zero tools
+
+3. **Transport quirks with Accept headers**
+   - ChatGPT sends: `Accept: application/json, text/event-stream` on POST
+   - Your server must accept either:
+     - Single JSON object response, **OR**
+     - Start an SSE stream
+   - Rejecting these `Accept` values causes invisibility
+
+4. **Missing or incorrect Content-Type**
+   - JSON responses must have: `Content-Type: application/json`
+   - SSE responses must have: `Content-Type: text/event-stream`
+
+5. **Session management issues**
+   - Stateful servers should return `Mcp-Session-Id` header
+   - Stateless servers should handle requests without session state
+
+### Debugging Checklist
+
+If your connector still isn't appearing, verify:
+
+- [ ] Server returns 200 OK for POST requests to `/mcp`
+- [ ] `initialize` response includes valid `capabilities` object
+- [ ] `tools/list` response includes at least one tool with complete schema
+- [ ] Server accepts `Accept: application/json, text/event-stream` header
+- [ ] No 406 errors are returned for any Accept header values
+- [ ] Developer mode is enabled in ChatGPT settings
+- [ ] Connector has been refreshed after making server changes
+
+### Example: Full Working Response Sequence
+
+A complete successful interaction should look like:
+
+1. **POST /mcp** (initialize) → 200 OK with capabilities
+2. **POST /mcp** (tools/list) → 200 OK with tools array
+3. **POST /mcp** (call tool) → 200 OK with tool results
+
+All responses should use `Content-Type: application/json` or `text/event-stream`, never return 406, and include proper JSON-RPC structure.
+
 ## Risks and safety
 
 Custom MCP servers enable you to connect your ChatGPT workspace to external applications, which allows ChatGPT to access, send and receive data in these applications. Please note that custom MCP servers are not developed or verified by OpenAI, and are third-party services that are subject to their own terms and conditions.
@@ -891,4 +1032,5 @@ As someone building an MCP server, don't put anything malicious in your tool def
 *   [Configure a data source Configure a data source](https://platform.openai.com/docs/mcp#configure-a-data-source)
 *   [Create an MCP server Create an MCP server](https://platform.openai.com/docs/mcp#create-an-mcp-server)
 *   [Test and connect your MCP server Test and connect your MCP server](https://platform.openai.com/docs/mcp#test-and-connect-your-mcp-server)
+*   [Troubleshooting and Debugging Troubleshooting and Debugging](https://platform.openai.com/docs/mcp#troubleshooting-and-debugging)
 *   [Risks and safety Risks and safety](https://platform.openai.com/docs/mcp#risks-and-safety)
