@@ -15,6 +15,7 @@ from typing import Any
 from urllib.parse import unquote
 
 from mcp.server.fastmcp import Context, FastMCP
+from mcp.types import ToolAnnotations
 
 from . import custom_methods
 from .db import insert_document
@@ -216,7 +217,7 @@ async def notifications_resource(ctx: Context) -> str:
 # MCP Tools for ChatGPT Connector Compatibility (REQUIRED)
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def search(query: str, ctx: Context) -> dict[str, Any]:
     """Search across Splitwise data (expenses, groups, friends) based on query.
 
@@ -298,7 +299,7 @@ async def search(query: str, ctx: Context) -> dict[str, Any]:
         raise
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def fetch(id: str, ctx: Context) -> dict[str, Any]:
     """Fetch full details of a specific item by ID.
 
@@ -483,7 +484,7 @@ async def remove_user_from_group(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_monthly_expenses(
     group_name: str, month: str, ctx: Context
 ) -> dict[str, Any]:
@@ -525,7 +526,7 @@ async def get_monthly_expenses(
         raise
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def generate_monthly_report(
     group_name: str, month: str, ctx: Context
 ) -> dict[str, Any]:
@@ -570,25 +571,25 @@ async def generate_monthly_report(
 # MCP Tools for GET methods (read operations for testing compatibility)
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_current_user(ctx: Context) -> dict[str, Any]:
     """Get current authenticated user information."""
     return await _call_splitwise_tool(ctx, "get_current_user")
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_groups(ctx: Context) -> dict[str, Any]:
     """List all groups for the current user."""
     return await _call_splitwise_tool(ctx, "list_groups")
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_group(group_id: int, ctx: Context) -> dict[str, Any]:
     """Get information about a specific group."""
     return await _call_splitwise_tool(ctx, "get_group", id=group_id)
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_expenses(
     ctx: Context,
     group_id: int | None = None,
@@ -612,37 +613,37 @@ async def list_expenses(
     return await _call_splitwise_tool(ctx, "list_expenses", **params)
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_expense(expense_id: int, ctx: Context) -> dict[str, Any]:
     """Get information about a specific expense."""
     return await _call_splitwise_tool(ctx, "get_expense", id=expense_id)
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_friends(ctx: Context) -> dict[str, Any]:
     """List all friends for the current user."""
     return await _call_splitwise_tool(ctx, "list_friends")
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_friend(friend_id: int, ctx: Context) -> dict[str, Any]:
     """Get information about a specific friend."""
     return await _call_splitwise_tool(ctx, "get_friend", id=friend_id)
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_categories(ctx: Context) -> dict[str, Any]:
     """List all available expense categories."""
     return await _call_splitwise_tool(ctx, "list_categories")
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_currencies(ctx: Context) -> dict[str, Any]:
     """List all supported currencies."""
     return await _call_splitwise_tool(ctx, "list_currencies")
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_exchange_rates(ctx: Context) -> dict[str, Any]:
     """Get current exchange rates."""
     return await _call_splitwise_tool(ctx, "get_exchange_rates")
