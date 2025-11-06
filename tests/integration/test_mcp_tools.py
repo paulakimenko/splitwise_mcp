@@ -6,6 +6,7 @@ over the actual MCP protocol, providing comprehensive validation.
 
 from __future__ import annotations
 
+import json
 import os
 from contextlib import asynccontextmanager
 
@@ -75,8 +76,6 @@ class TestMCPToolsIntegration:
             assert content.type == "text"
 
             # Parse the response JSON
-            import json
-
             data = json.loads(content.text)
 
             assert "id" in data
@@ -99,8 +98,6 @@ class TestMCPToolsIntegration:
                 pytest.skip(f"Tool returned error: {content.text}")
                 return
 
-            import json
-
             try:
                 data = json.loads(content.text)
             except json.JSONDecodeError:
@@ -122,8 +119,6 @@ class TestMCPToolsIntegration:
         async with mcp_client_session() as session:
             # First get a group to test with
             groups_result = await session.call_tool("list_groups", {})
-
-            import json
 
             groups_content = groups_result.content[0]
 
@@ -177,8 +172,6 @@ class TestMCPToolsIntegration:
         async with mcp_client_session() as session:
             # First get available groups
             groups_result = await session.call_tool("list_groups", {})
-
-            import json
 
             groups_content = groups_result.content[0]
 

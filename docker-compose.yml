@@ -10,7 +10,9 @@ services:
       - mongo_data:/data/db
 
   splitwise-mcp:
-    image: paulakimenko/splitwise-mcp:latest
+    # Use build: . for local development, or uncomment image line for pre-built image
+    build: .
+    # image: paulakimenko/splitwise-mcp:latest
     container_name: splitwise_mcp_app
     depends_on:
       - mongo

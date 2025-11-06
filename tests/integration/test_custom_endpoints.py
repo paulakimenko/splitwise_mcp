@@ -111,8 +111,11 @@ class TestCustomEndpointsIntegration:
         assert response.status_code == 200
         data = response.json()
 
-        # Handle tuple response from Splitwise SDK (createExpense returns [expense, None])
-        expense_data = data[0] if isinstance(data, list) and len(data) > 0 else data
+        # Handle tuple/list response from Splitwise SDK (createExpense returns [expense, None])
+        if isinstance(data, (list, tuple)) and len(data) > 0:
+            expense_data = data[0]
+        else:
+            expense_data = data
 
         assert "id" in expense_data  # Check for expense creation
         assert expense_data.get("description") == "Integration Test Expense"
