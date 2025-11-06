@@ -20,8 +20,12 @@ pytestmark = pytest.mark.skipif(
 
 
 def mcp_http_request(
-    mcp_base_url: str, method: str, params: dict | None = None, request_id: int = 1,
-    session_id: str | None = None, initialized_sessions: dict | None = None
+    mcp_base_url: str,
+    method: str,
+    params: dict | None = None,
+    request_id: int = 1,
+    session_id: str | None = None,
+    initialized_sessions: dict | None = None,
 ):
     """Make an MCP request over HTTP and return the response.
 
@@ -65,14 +69,16 @@ def mcp_http_request(
         post_headers = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
-            "MCP-Session-Id": session_id
+            "MCP-Session-Id": session_id,
         }
 
         init_response = requests.post(
             mcp_base_url, json=initialize_request, headers=post_headers, timeout=10
         )
 
-        assert init_response.status_code in [200, 201], f"Initialization failed: {init_response.text}"
+        assert init_response.status_code in [200, 201], (
+            f"Initialization failed: {init_response.text}"
+        )
 
         # Mark session as initialized
         initialized_sessions[session_id] = True
@@ -118,7 +124,7 @@ def mcp_http_request(
         for line in lines:
             if line.startswith("data: "):
                 # Start of a data field
-                data_parts.append(line[len("data: "):])
+                data_parts.append(line[len("data: ") :])
                 in_data_field = True
             elif line.startswith(("event:", "id:", "retry:")):
                 # SSE field - end of previous data field
@@ -145,7 +151,9 @@ class TestMCPToolsIntegration:
     def test_get_current_user(self, mcp_server_process: str):
         """Test get_current_user tool via HTTP."""
         result, _ = mcp_http_request(
-            mcp_server_process, "tools/call", {"name": "get_current_user", "arguments": {}}
+            mcp_server_process,
+            "tools/call",
+            {"name": "get_current_user", "arguments": {}},
         )
         assert result["jsonrpc"] == "2.0"
         assert "result" in result or "error" in result
@@ -181,8 +189,8 @@ class TestMCPToolsIntegration:
         assert isinstance(data["groups"], list)
         # Each group should have an id and name
         for group in data["groups"]:
-                assert "id" in group
-                assert "name" in group
+            assert "id" in group
+            assert "name" in group
 
     def test_list_expenses_with_filters(self, mcp_server_process: str):
         """Test list_expenses MCP tool with filters."""
@@ -217,7 +225,10 @@ class TestMCPToolsIntegration:
             response, _ = mcp_http_request(
                 mcp_server_process,
                 "tools/call",
-                {"name": "list_expenses", "arguments": {"group_id": group_id, "limit": 5}},
+                {
+                    "name": "list_expenses",
+                    "arguments": {"group_id": group_id, "limit": 5},
+                },
             )
 
             assert "result" in response
@@ -344,7 +355,9 @@ class TestMCPServerCapabilities:
         assert "resources" in result
         # Resources may or may not be available depending on server implementation
         # The test just verifies the list_resources call works
-        assert isinstance(result["resources"], list)  # Should return a list (even if empty)
+        assert isinstance(
+            result["resources"], list
+        )  # Should return a list (even if empty)
 
 
 class TestMCPErrorHandling:
@@ -374,7 +387,12 @@ class TestMCPErrorHandling:
         # Should have an error in the response
         assert "error" in response or (
             "result" in response
-            and response["result"].get("contents", [{}])[0].get("text", "").lower().find("error") >= 0
+            and response["result"]
+            .get("contents", [{}])[0]
+            .get("text", "")
+            .lower()
+            .find("error")
+            >= 0
         )
 
     def test_invalid_tool_parameters(self, mcp_server_process: str):

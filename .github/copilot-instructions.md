@@ -19,6 +19,30 @@ The official SDK documentation covers:
 - Transport options (stdio, StreamableHTTP, SSE)
 - Advanced features like structured output and pagination
 
+### MCP Integration Guides
+
+**For integrating MCP servers with AI platforms and implementing OAuth authorization:**
+
+📋 **[ChatGPT MCP Integration Guide](docs-for-copilot/CHAT_GPT_BUILDING_MCP.md)**
+
+This guide covers building MCP servers specifically for ChatGPT integration:
+- Implementing required `search` and `fetch` tools for ChatGPT connectors
+- Tool response formats and content structures
+- Deep research integration patterns
+- Testing with ChatGPT prompts dashboard
+- Security and authentication considerations
+- Prompt injection risks and mitigation strategies
+
+📋 **[MCP OAuth Authorization Specification](docs-for-copilot/AUTH_MCP.md)**
+
+Complete OAuth 2.1 authorization implementation for MCP servers:
+- OAuth 2.1 authorization flow with PKCE
+- Dynamic client registration (RFC7591)
+- Authorization server metadata discovery (RFC8414)
+- Token handling and security requirements
+- Public vs confidential client patterns
+- Session binding and third-party authorization flows
+
 ### Architecture Components
 
 The pure MCP implementation provides:
@@ -224,6 +248,96 @@ docker-compose up --build
 The MCP server **requires Streamable HTTP transport** for remote operation and Docker deployment, enabling MCP clients to connect over HTTP from any machine.
 
 ### Configuration
+The server automatically detects transport mode via environment variables:
+- `MCP_TRANSPORT=streamable-http` - Enables HTTP transport (required for Docker)
+- `MCP_HOST=0.0.0.0` - Binds to all interfaces for remote access
+- `MCP_PORT=8000` - HTTP server port (exposed by Docker)
+
+### Client Connection
+Remote MCP clients connect to: `http://localhost:8000/mcp`
+
+### Local vs. Remote Operation
+- **Local Development**: Uses `stdio` transport by default
+- **Docker/Remote**: Uses `streamable-http` transport for network access
+- **Production**: Streamable HTTP enables multi-client access and load balancing
+
+### Environment Detection
+```python
+# Server automatically chooses transport based on MCP_TRANSPORT environment
+transport = os.environ.get("MCP_TRANSPORT", "stdio")
+if transport == "streamable-http":
+    mcp.run(transport="streamable-http", host="0.0.0.0", port=8000)
+else:
+    mcp.run()  # stdio transport
+```
+
+## ChatGPT & AI Platform Integration
+
+### ChatGPT Connector Setup
+
+**For detailed ChatGPT integration instructions, see:**  
+📋 **[ChatGPT MCP Integration Guide](docs-for-copilot/CHAT_GPT_BUILDING_MCP.md)**
+
+To integrate with ChatGPT as a custom connector:
+
+1. **Deploy Server with HTTP Transport**:
+   - Must use Streamable HTTP transport (not stdio)
+   - Server must be publicly accessible (e.g., `https://your-domain.com/mcp`)
+   - Configure with `MCP_TRANSPORT=streamable-http`
+
+2. **Implement Required Tools** (for ChatGPT connectors):
+   - `search` tool - Returns search results with `id`, `title`, `url` fields
+   - `fetch` tool - Retrieves full content by ID
+   - Both tools return MCP `TextContent` with JSON-encoded data
+   - See ChatGPT integration guide for exact response format
+
+3. **Configure in ChatGPT**:
+   - Add connector URL in ChatGPT settings → Connectors
+   - Enable for "Deep Research" and "Use Connectors"
+   - Test with prompts that trigger your MCP tools
+
+### Authentication for Production
+
+**For OAuth 2.1 implementation details, see:**  
+📋 **[MCP OAuth Authorization Specification](docs-for-copilot/AUTH_MCP.md)**
+
+Production deployments should implement OAuth authorization:
+
+1. **Authorization Server Setup**:
+   - Implement OAuth 2.1 with PKCE (recommended)
+   - Support dynamic client registration (RFC7591)
+   - Provide authorization server metadata (RFC8414)
+   - Default endpoints: `/authorize`, `/token`, `/register`
+
+2. **Token Requirements**:
+   - All HTTP requests must include: `Authorization: Bearer <token>`
+   - Return HTTP 401 for unauthorized requests
+   - Validate tokens on every request
+   - Support token refresh flow
+
+3. **Security Best Practices**:
+   - Use HTTPS in production
+   - Implement CORS for browser-based clients
+   - Expose `Mcp-Session-Id` header for session management
+   - Follow OAuth 2.1 security guidelines
+
+### Testing Remote Deployment
+
+Use the provided test scripts in `scripts/`:
+
+```bash
+# Test remote MCP server connectivity
+python scripts/test_remote_mcp.py
+
+# Test local HTTP MCP server
+python scripts/test_http_request.py
+```
+
+These scripts verify:
+- Server is reachable and returning 200 OK (not 503)
+- Session ID is present in response headers
+- MCP protocol initialization works
+- Tools can be listed and called successfully
 The server automatically detects transport mode via environment variables:
 - `MCP_TRANSPORT=streamable-http` - Enables HTTP transport (required for Docker)
 - `MCP_HOST=0.0.0.0` - Binds to all interfaces for remote access
