@@ -88,3 +88,27 @@ def current_user_id(splitwise_client: SplitwiseClient) -> int:
     if not user_id:
         pytest.skip("Could not get current user ID - authentication may be invalid")
     return user_id
+
+
+# MCP-specific configuration
+def pytest_configure(config):
+    """Configure pytest for MCP testing."""
+    # Add custom markers for MCP tests
+    config.addinivalue_line(
+        "markers", "mcp: mark test as MCP-specific integration test"
+    )
+    config.addinivalue_line(
+        "markers", "mcp_slow: mark test as slow MCP test (may create/delete data)"
+    )
+
+
+@pytest.fixture(scope="session")
+def mcp_test_config():
+    """Configuration for MCP tests."""
+    return {
+        "base_url": os.getenv("MCP_BASE_URL", "http://localhost:8000/mcp"),
+        "timeout": int(os.getenv("MCP_TEST_TIMEOUT", "30")),
+        "has_api_key": bool(
+            os.getenv("SPLITWISE_API_KEY") or os.getenv("SPLITWISE_CONSUMER_KEY")
+        ),
+    }

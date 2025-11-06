@@ -96,6 +96,27 @@ integration-test-docker: ## Run integration tests with Docker Compose (MongoDB +
 	@echo "Stopping Docker Compose services..."
 	@docker-compose down
 
+test-mcp: ## Run MCP-specific integration tests  
+	@echo "Running MCP endpoint tests..."
+	@if [ -f .env ]; then set -o allexport; source .env; set +o allexport; fi && \
+	if [ -z "$$SPLITWISE_API_KEY" ] && [ -z "$$SPLITWISE_CONSUMER_KEY" ]; then echo "Error: Either SPLITWISE_API_KEY or SPLITWISE_CONSUMER_KEY/SPLITWISE_CONSUMER_SECRET must be set"; exit 1; fi && \
+	.venv/bin/python -m pytest tests/integration/test_mcp_*.py -v --tb=short -s
+
+test-mcp-manual: ## Run manual MCP testing tool
+	@if [ -f .env ]; then set -o allexport; source .env; set +o allexport; fi && \
+	.venv/bin/python scripts/test_mcp_manual.py quick-test
+
+test-mcp-tools: ## List available MCP tools
+	@if [ -f .env ]; then set -o allexport; source .env; set +o allexport; fi && \
+	.venv/bin/python scripts/test_mcp_manual.py list-tools
+
+test-mcp-call: ## Call specific MCP tool (usage: make test-mcp-call TOOL=get_current_user ARGS='{}')
+	@if [ -f .env ]; then set -o allexport; source .env; set +o allexport; fi && \
+	TOOL=$${TOOL:-get_current_user} && \
+	ARGS=$${ARGS:-'{}'} && \
+	echo "Calling MCP tool: $$TOOL with args: $$ARGS" && \
+	.venv/bin/python scripts/test_mcp_manual.py call $$TOOL --args "$$ARGS"
+
 test-all-local: ## Run unit tests and integration tests
 	$(MAKE) unit-test
 	$(MAKE) integration-test
@@ -127,7 +148,7 @@ test-full: check unit-test integration-test ## Run all checks, unit tests, and i
 
 ci: install-dev test-all ## Run full CI pipeline locally (unit tests only)
 
-ci-full: install-dev test-full ## Run full CI pipeline with integration tests
+ci-full: install-dev test-full test-mcp ## Run full CI pipeline with integration and MCP tests
 
 # Environment Commands
 env-setup: ## Copy .env.example to .env if it doesn't exist
