@@ -17,6 +17,60 @@ This is a **FastAPI-based Model Context Protocol (MCP) server** that integrates 
 - **`app/db.py`** - MongoDB utilities with timestamp-based document insertion
 - **`app/models.py`** - Pydantic request/response schemas
 
+### Splitwise API Reference
+
+**For all Splitwise domain model, API endpoints, data structures, and integration questions, refer to the complete OpenAPI specification:**
+
+📋 **[Splitwise OpenAPI 3.0 Specification](docs-for-copilot/splitwise-openapi.json)**
+
+This specification includes:
+- Complete API endpoint definitions and parameters
+- Request/response schemas for all data structures (User, Group, Expense, etc.)
+- Authentication methods (OAuth2, API Key)
+- Field descriptions, validation rules, and examples
+- Business logic constraints and relationships
+- Error response formats and status codes
+
+Use this reference when:
+- Understanding Splitwise data models (expenses, groups, users, friends)
+- Implementing new MCP tools or REST endpoints
+- Validating API parameters and response formats
+- Debugging integration issues or data mapping
+- Adding new features that interact with Splitwise APIs
+
+## Use Cases & Examples
+
+**For comprehensive real-world usage scenarios and implementation patterns, see:**
+
+📋 **[Use Case Examples](docs-for-copilot/use-cases.md)**
+
+This document provides 42 detailed examples covering common Splitwise operations:
+
+**Basic Operations:**
+- Add expenses with equal splits or custom shares
+- Create groups and manage memberships
+- Track expenses and generate reports
+
+**Advanced Workflows:**
+- Multi-currency expense conversion
+- Batch expense operations
+- Debt settlement optimization
+- Category-based expense filtering
+
+**Reporting & Analytics:**
+- Monthly and quarterly expense reports
+- Cross-group spending analysis
+- Outstanding balance calculations
+- Trend analysis and recommendations
+
+**Data Management:**
+- Export expense data to CSV/tables
+- Search expenses by keywords or criteria
+- Bulk operations on multiple expenses
+- Archive and restore groups
+
+These examples demonstrate how to combine MCP tools, REST endpoints, and custom helpers to build complete expense management workflows. Each use case includes the specific API calls, data structures, and business logic patterns needed for implementation.
+
 ## Critical Patterns
 
 ### Method Mapping Pattern

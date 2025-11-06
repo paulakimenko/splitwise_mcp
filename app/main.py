@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import Any
+from unittest.mock import Mock
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import custom_methods
+from . import custom_methods, mcp_server
 from .db import find_latest, get_db, insert_document
 from .logging_utils import log_operation
 from .mcp_server import mcp
@@ -19,6 +21,14 @@ from .models import (
     GenericResponse,
 )
 from .splitwise_client import SplitwiseClient
+
+# Import splitwise SDK classes with error handling for optional dependency
+try:
+    from splitwise.expense import Expense, ExpenseUser  # type: ignore
+except ImportError:
+    # Handle case where splitwise SDK is not available
+    Expense = None  # type: ignore
+    ExpenseUser = None  # type: ignore
 
 
 @asynccontextmanager
@@ -54,7 +64,123 @@ app.add_middleware(
 )
 
 # Mount the official MCP server at /mcp path
-app.mount("/mcp", mcp.streamable_http_app())
+# Note: FastMCP HTTP transport may not work when mounted - using alternative approach
+with suppress(Exception):
+    # If mounting fails, we'll provide alternative endpoints
+    app.mount("/mcp", mcp.streamable_http_app())
+
+
+# Alternative MCP testing endpoint for development/testing
+@app.post("/mcp-test/call-tool")
+async def call_mcp_tool_test(
+    request: Request, tool_name: str, arguments: dict[str, Any] | None = None
+) -> Any:
+    """Test endpoint to call MCP tools directly (for testing/development purposes only).
+
+    WARNING: This endpoint uses mock contexts and is intended for development and testing only.
+    In production, MCP tools should be called through the proper MCP protocol channels.
+    This endpoint may be disabled in production environments.
+    """
+    # Development guard - check for debug environment
+    if (
+        os.getenv("DEBUG", "").lower() not in ("1", "true", "yes")
+        and os.getenv("ENVIRONMENT", "").lower() == "production"
+    ):
+        raise HTTPException(
+            status_code=404, detail="MCP test endpoints are not available in production"
+        )
+
+    if arguments is None:
+        arguments = {}
+
+    try:
+        # Get the tool function from the MCP server
+        tool_functions = {
+            "get_current_user": mcp_server.get_current_user,
+            "list_groups": mcp_server.list_groups,
+            "get_group": mcp_server.get_group,
+            "list_expenses": mcp_server.list_expenses,
+            "get_expense": mcp_server.get_expense,
+            "list_friends": mcp_server.list_friends,
+            "get_friend": mcp_server.get_friend,
+            "list_categories": mcp_server.list_categories,
+            "list_currencies": mcp_server.list_currencies,
+            "get_exchange_rates": mcp_server.get_exchange_rates,
+            "list_notifications": mcp_server.list_notifications,
+        }
+
+        if tool_name not in tool_functions:
+            raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found")
+
+        tool_func = tool_functions[tool_name]
+
+        # Create a mock context for the MCP tool using the factory function
+        mock_context = _create_mock_mcp_context(request.app.state.client)
+
+        # Call the tool with appropriate arguments
+        if tool_name == "get_group":
+            result = await tool_func(arguments.get("group_id"), mock_context)
+        elif tool_name == "get_expense":
+            result = await tool_func(arguments.get("expense_id"), mock_context)
+        elif tool_name == "get_friend":
+            result = await tool_func(arguments.get("friend_id"), mock_context)
+        elif tool_name == "list_expenses":
+            result = await tool_func(
+                group_id=arguments.get("group_id"),
+                friend_id=arguments.get("friend_id"),
+                dated_after=arguments.get("dated_after"),
+                dated_before=arguments.get("dated_before"),
+                ctx=mock_context,
+            )
+        elif tool_name == "list_notifications":
+            result = await tool_func(arguments.get("limit"), mock_context)
+        else:
+            # Tools that take no arguments
+            result = await tool_func(mock_context)
+
+        return {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {"content": [{"type": "text", "text": str(result)}]},
+        }
+
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/mcp-test/list-tools")
+async def list_mcp_tools_test() -> Any:
+    """Test endpoint to list available MCP tools (for testing/development purposes only).
+
+    WARNING: This endpoint is intended for development and testing only.
+    It may be disabled in production environments.
+    """
+    # Development guard - check for debug environment
+    if (
+        os.getenv("DEBUG", "").lower() not in ("1", "true", "yes")
+        and os.getenv("ENVIRONMENT", "").lower() == "production"
+    ):
+        raise HTTPException(
+            status_code=404, detail="MCP test endpoints are not available in production"
+        )
+    tools = [
+        {
+            "name": "get_current_user",
+            "description": "Get current authenticated user information",
+        },
+        {"name": "list_groups", "description": "List all groups for the current user"},
+        {"name": "get_group", "description": "Get details of a specific group by ID"},
+        {"name": "list_expenses", "description": "List expenses with optional filters"},
+        {"name": "get_expense", "description": "Get details of a specific expense"},
+        {"name": "list_friends", "description": "List all friends"},
+        {"name": "get_friend", "description": "Get details of a specific friend"},
+        {"name": "list_categories", "description": "List expense categories"},
+        {"name": "list_currencies", "description": "List supported currencies"},
+        {"name": "get_exchange_rates", "description": "Get current exchange rates"},
+        {"name": "list_notifications", "description": "List notifications"},
+    ]
+
+    return {"jsonrpc": "2.0", "id": 1, "result": {"tools": tools}}
 
 
 @app.get("/health", summary="Health check endpoint")
@@ -83,6 +209,17 @@ async def health_check() -> dict[str, Any]:
 def get_client(request: Request) -> SplitwiseClient:
     """Dependency to obtain a SplitwiseClient instance stored in app state."""
     return request.app.state.client
+
+
+def _create_mock_mcp_context(client: SplitwiseClient) -> Any:
+    """Create a mock MCP context for testing purposes.
+
+    WARNING: This is for development/testing only and should not be used in production.
+    In a real MCP environment, the context is provided by the MCP framework.
+    """
+    mock_context = Mock()
+    mock_context.request_context.lifespan_context = {"client": client}
+    return mock_context
 
 
 # REST endpoints for cached data
@@ -213,11 +350,10 @@ async def custom_add_expense_equal(
         me_id = client.get_current_user_id()
         if me_id is None:
             raise ValueError("Could not determine current user ID")
-        # Import classes from splitwise SDK lazily
-        from splitwise.expense import (
-            Expense,  # type: ignore
-            ExpenseUser,  # type: ignore
-        )
+
+        # Check if splitwise SDK classes are available
+        if Expense is None or ExpenseUser is None:
+            raise ValueError("Splitwise SDK is not available")
 
         expense = Expense()
         expense.setCost(str(payload.amount))
@@ -242,11 +378,20 @@ async def custom_add_expense_equal(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     # Convert result and persist
     response_data = client.convert(created)
-    insert_document("custom_add_expense_equal_split", {"response": response_data})
-    log_operation(
-        endpoint="/custom/add_expense_equal_split",
-        method="POST",
-        params=payload.model_dump(),
-        response=response_data,
-    )
+
+    # Try to persist to database, but don't fail if database is unavailable
+    try:
+        insert_document("custom_add_expense_equal_split", {"response": response_data})
+        log_operation(
+            endpoint="/custom/add_expense_equal_split",
+            method="POST",
+            params=payload.model_dump(),
+            response=response_data,
+        )
+    except Exception as db_exc:
+        # Log database connection issues but continue operation
+        logging.warning(
+            f"Database operation failed for add_expense_equal_split: {db_exc}"
+        )
+
     return response_data

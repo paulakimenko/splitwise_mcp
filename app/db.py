@@ -43,6 +43,7 @@ def insert_document(collection: str, document: dict[str, Any]) -> Any:
 
     Adds a timestamp to the document before insertion.
     Returns the inserted document's ID.
+    Raises exception if MongoDB is not available.
     """
     db = get_db()
     document = {**document, "timestamp": datetime.now(UTC)}

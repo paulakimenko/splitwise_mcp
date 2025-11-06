@@ -115,8 +115,8 @@ class TestMCPTools:
         """Test list_expenses tool with filters."""
         with (
             patch("app.mcp_server.asyncio.to_thread") as mock_to_thread,
-            patch("app.mcp_server.insert_document") as mock_insert,
-            patch("app.mcp_server.log_operation") as mock_log,
+            patch("app.mcp_server.insert_document"),
+            patch("app.mcp_server.log_operation"),
         ):
             from app.mcp_server import list_expenses
 
@@ -216,33 +216,19 @@ class TestMCPResources:
 
         result = await get_group_by_name("Test Group", mock_context)
 
-        assert result == "{'id': 123, 'name': 'Test Group'}"
+        assert result == '{"id": 123, "name": "Test Group"}'
         mock_client.get_group_by_name.assert_called_once_with("Test Group")
 
     @pytest.mark.asyncio
     async def test_group_resource_not_found(self, mock_context):
-        """Test group resource when group not found."""
+        """Test group resource when group is not found."""
         from app.mcp_server import get_group_by_name
 
         mock_client = mock_context.request_context.lifespan_context["client"]
         mock_client.get_group_by_name.return_value = None
 
-        result = await get_group_by_name("NonExistent", mock_context)
-        assert result == "Group 'NonExistent' not found"
-
-    @pytest.mark.asyncio
-    async def test_balance_resource(self, mock_context):
-        """Test balance resource."""
-        from app.mcp_server import get_balance
-
-        mock_client = mock_context.request_context.lifespan_context["client"]
-        mock_client.call_mapped_method.return_value = {"total_balance": "150.00"}
-        mock_client.convert.return_value = {"converted": "data"}
-
-        result = await get_balance(mock_context)
-
-        assert result == "{'converted': 'data'}"
-        mock_client.call_mapped_method.assert_called_once_with("get_current_user")
+        with pytest.raises(ValueError, match="Group 'NonExistent' not found"):
+            await get_group_by_name("NonExistent", mock_context)
 
 
 class TestHelperFunction:

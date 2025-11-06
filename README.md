@@ -107,6 +107,18 @@ docker-compose up --build
 
 **Access the API**: Open [`http://localhost:8000/docs`](http://localhost:8000/docs) for interactive API documentation.
 
+### Testing Scripts
+
+The `scripts/` directory contains utility scripts for testing and managing the service:
+
+- **`test_docker_mcp.sh`** - Automated Docker testing workflow that starts services and runs comprehensive tests
+- **`test_mcp_docker.py`** - Python script for testing MCP server functionality  
+- **`test_mcp_manual.py`** - Manual testing utilities for development
+
+**Quick Test**: `./scripts/test_docker_mcp.sh` (starts Docker services and runs all tests)
+
+See [`scripts/README.md`](scripts/README.md) for detailed documentation.
+
 ## Using the MCP Server
 
 The service provides both an MCP server for AI agents and REST endpoints for traditional HTTP clients:
