@@ -107,7 +107,7 @@ def mcp_test_config():
     """Configuration for MCP tests."""
     return {
         "base_url": os.getenv("MCP_BASE_URL", "http://localhost:8000/mcp"),
-        "timeout": int(os.getenv("MCP_TEST_TIMEOUT", "30")),
+        "timeout": int(os.getenv("MCP_TEST_TIMEOUT", "10")),
         "has_api_key": bool(
             os.getenv("SPLITWISE_API_KEY") or os.getenv("SPLITWISE_CONSUMER_KEY")
         ),

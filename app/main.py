@@ -340,11 +340,18 @@ async def custom_add_expense_equal(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     # Convert result and persist
     response_data = client.convert(created)
-    insert_document("custom_add_expense_equal_split", {"response": response_data})
-    log_operation(
-        endpoint="/custom/add_expense_equal_split",
-        method="POST",
-        params=payload.model_dump(),
-        response=response_data,
-    )
+
+    # Try to persist to database, but don't fail if database is unavailable
+    try:
+        insert_document("custom_add_expense_equal_split", {"response": response_data})
+        log_operation(
+            endpoint="/custom/add_expense_equal_split",
+            method="POST",
+            params=payload.model_dump(),
+            response=response_data,
+        )
+    except Exception:
+        # Silently continue if database operations fail
+        pass
+
     return response_data

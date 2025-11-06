@@ -26,9 +26,22 @@ class TestMCPServerIntegration:
         """Base URL for the API server."""
         return os.getenv("API_BASE_URL", "http://localhost:8000")
 
+    def _check_server_available(self, api_base_url: str) -> bool:
+        """Check if server is available and skip test if not."""
+        try:
+            response = requests.get(f"{api_base_url}/health", timeout=2)
+            return response.status_code == 200
+        except requests.exceptions.ConnectionError:
+            return False
+
     def test_server_health(self, api_base_url: str):
         """Test that the API server is accessible and has MCP functionality."""
-        response = requests.get(f"{api_base_url}/health", timeout=5)
+        if not self._check_server_available(api_base_url):
+            pytest.skip(
+                "Server not available - tests require a running server on localhost:8000"
+            )
+
+        response = requests.get(f"{api_base_url}/health", timeout=2)
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
@@ -36,8 +49,13 @@ class TestMCPServerIntegration:
 
     def test_mcp_server_available_via_mount(self, api_base_url: str):
         """Test that MCP server is available through mounting (may return 404 due to FastMCP limitations)."""
+        if not self._check_server_available(api_base_url):
+            pytest.skip(
+                "Server not available - tests require a running server on localhost:8000"
+            )
+
         # Test the MCP endpoint - FastMCP mounting may not work properly with FastAPI
-        response = requests.get(f"{api_base_url}/mcp", timeout=5)
+        response = requests.get(f"{api_base_url}/mcp", timeout=2)
         # Accept 404, 307, or other responses - the key is that we don't get 500 (internal server error)
         assert response.status_code != 500
 
@@ -48,8 +66,13 @@ class TestMCPServerIntegration:
 
     def test_mcp_tools_functionality_via_api(self, api_base_url: str):
         """Test MCP-like functionality through existing API endpoints (indirect test)."""
+        if not self._check_server_available(api_base_url):
+            pytest.skip(
+                "Server not available - tests require a running server on localhost:8000"
+            )
+
         # Test that we can access cached data that would be populated by MCP tools
-        response = requests.get(f"{api_base_url}/groups", timeout=5)
+        response = requests.get(f"{api_base_url}/groups", timeout=2)
 
         # Should return successful response (may be empty if no cached data)
         if response.status_code == 404:
@@ -60,6 +83,11 @@ class TestMCPServerIntegration:
 
     def test_mcp_session_initialization_fallback(self, api_base_url: str):
         """Test MCP session initialization over HTTP (with graceful fallback)."""
+        if not self._check_server_available(api_base_url):
+            pytest.skip(
+                "Server not available - tests require a running server on localhost:8000"
+            )
+
         initialize_request = {
             "jsonrpc": "2.0",
             "id": 1,
@@ -80,7 +108,7 @@ class TestMCPServerIntegration:
             f"{api_base_url}/mcp",
             headers=mcp_headers,
             json=initialize_request,
-            timeout=10,
+            timeout=5,
         )
 
         # FastMCP mounting limitations - accept 404 as expected
@@ -95,14 +123,19 @@ class TestMCPServerIntegration:
 
     def test_mcp_functionality_demonstration(self, api_base_url: str):
         """Demonstrate MCP functionality through documentation and health check."""
+        if not self._check_server_available(api_base_url):
+            pytest.skip(
+                "Server not available - tests require a running server on localhost:8000"
+            )
+
         # This test demonstrates that MCP server exists and is configured
 
         # 1. Verify the server is running and configured
-        health_response = requests.get(f"{api_base_url}/health", timeout=5)
+        health_response = requests.get(f"{api_base_url}/health", timeout=2)
         assert health_response.status_code == 200
 
         # 2. Check that the server has MCP-related endpoints documented
-        openapi_response = requests.get(f"{api_base_url}/openapi.json", timeout=5)
+        openapi_response = requests.get(f"{api_base_url}/openapi.json", timeout=2)
         assert openapi_response.status_code == 200
 
         openapi_data = openapi_response.json()

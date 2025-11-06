@@ -36,11 +36,15 @@ def log_operation(
     error: str | None
         Optional error message if an exception occurred.
     """
-    log_doc: dict[str, Any] = {
-        "endpoint": endpoint,
-        "method": method,
-        "params": params,
-        "response": response,
-        "error": error,
-    }
-    insert_document("logs", log_doc)
+    try:
+        log_doc: dict[str, Any] = {
+            "endpoint": endpoint,
+            "method": method,
+            "params": params,
+            "response": response,
+            "error": error,
+        }
+        insert_document("logs", log_doc)
+    except Exception:
+        # Silently ignore logging failures to avoid breaking the main operation
+        pass

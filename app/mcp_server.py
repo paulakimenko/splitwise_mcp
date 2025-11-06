@@ -60,13 +60,21 @@ async def _call_splitwise_method(
         )
         response_data = client.convert(result)
 
-        # Persist to database and log operation
-        insert_document(method_name, {"response": response_data})
-        log_operation(method_name, "TOOL_CALL", kwargs, response_data)
+        # Try to persist to database and log operation, but don't fail if database is unavailable
+        try:
+            insert_document(method_name, {"response": response_data})
+            log_operation(method_name, "TOOL_CALL", kwargs, response_data)
+        except Exception:
+            # Silently continue if database operations fail
+            pass
 
         return response_data
     except Exception as exc:
-        log_operation(method_name, "TOOL_CALL", kwargs, None, str(exc))
+        # Try to log the error, but don't fail if database is unavailable
+        from contextlib import suppress
+
+        with suppress(Exception):
+            log_operation(method_name, "TOOL_CALL", kwargs, None, str(exc))
         raise
 
 
