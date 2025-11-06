@@ -16,6 +16,7 @@ from urllib.parse import unquote
 
 from mcp.server.fastmcp import Context, FastMCP
 
+from . import custom_methods
 from .db import insert_document
 from .logging_utils import log_operation
 from .splitwise_client import SplitwiseClient
@@ -141,8 +142,6 @@ async def group_resource(group_id: str, ctx: Context) -> str:
         # If not an integer, treat as group name
         client = ctx.request_context.lifespan_context["client"]
         # URL decode the name in case it contains special characters
-        from urllib.parse import unquote
-
         decoded_name = unquote(group_id)
         group = client.get_group_by_name(decoded_name)
         if group is None:
@@ -322,8 +321,6 @@ async def get_monthly_expenses(
     group_name: str, month: str, ctx: Context
 ) -> dict[str, Any]:
     """Get all expenses for a specific group and month."""
-    from . import custom_methods
-
     client = ctx.request_context.lifespan_context["client"]
     try:
         expenses = await custom_methods.expenses_by_month(client, group_name, month)
@@ -366,8 +363,6 @@ async def generate_monthly_report(
     group_name: str, month: str, ctx: Context
 ) -> dict[str, Any]:
     """Generate a detailed monthly expense report for a group."""
-    from . import custom_methods
-
     client = ctx.request_context.lifespan_context["client"]
     try:
         report = await custom_methods.monthly_report(client, group_name, month)
