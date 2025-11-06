@@ -4,9 +4,7 @@ import os
 
 import pytest
 from dotenv import load_dotenv
-from fastapi.testclient import TestClient
 
-from app.main import app
 from app.splitwise_client import SplitwiseClient
 
 # Load environment variables from .env file
@@ -30,13 +28,11 @@ def splitwise_client() -> SplitwiseClient:
 
 
 @pytest.fixture(scope="session")
-def test_client(splitwise_client: SplitwiseClient):
-    """Create a test client for the FastAPI app with proper state setup."""
-    # Create test client with lifespan events disabled to avoid startup issues
-    with TestClient(app) as client:
-        # Manually set the client in app state since lifespan won't run in test mode
-        app.state.client = splitwise_client
-        yield client
+def mcp_client(splitwise_client: SplitwiseClient):
+    """Create an MCP client for testing MCP server functionality."""
+    # For MCP server testing, we primarily use the splitwise_client directly
+    # since the MCP server uses it internally
+    return splitwise_client
 
 
 @pytest.fixture(scope="session")

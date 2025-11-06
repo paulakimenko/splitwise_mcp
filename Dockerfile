@@ -1,8 +1,8 @@
 FROM python:3.11-slim
 
-# Install system dependencies including supervisor for process management
+# Install system dependencies 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc build-essential supervisor && \
+    apt-get install -y --no-install-recommends gcc build-essential && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -14,28 +14,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source code
 COPY . .
 
-# Create supervisor configuration
-COPY <<EOF /etc/supervisor/conf.d/splitwise.conf
-[supervisord]
-nodaemon=true
-
-[program:fastapi]
-command=uvicorn app.main:app --host 0.0.0.0 --port 8000
-directory=/app
-autostart=true
-autorestart=true
-stderr_logfile=/var/log/fastapi.err.log
-stdout_logfile=/var/log/fastapi.out.log
-
-[program:mcp_server]
-command=python -m app.mcp_server
-directory=/app
-autostart=true
-autorestart=true
-stderr_logfile=/var/log/mcp_server.err.log
-stdout_logfile=/var/log/mcp_server.out.log
-EOF
-
+# Expose port for Streamable HTTP transport
 EXPOSE 8000
 
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisord.conf"]
+# Run the pure MCP server
+CMD ["python", "-m", "app.main"]
