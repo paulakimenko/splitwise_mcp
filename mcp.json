@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "splitwise": {
+      "command": "python",
+      "args": [
+        "-m",
+        "app.mcp_server"
+      ],
+      "env": {
+        "SPLITWISE_API_KEY": "${SPLITWISE_API_KEY}",
+        "MONGO_URI": "${MONGO_URI}",
+        "DB_NAME": "${DB_NAME}"
+      }
+    }
+  }
+}

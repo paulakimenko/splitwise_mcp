@@ -54,18 +54,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Splitwise MCP Service", version="0.1.0", lifespan=lifespan)
 
+
 # Request logging middleware to debug invalid HTTP requests
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     """Log all HTTP requests for debugging invalid request warnings."""
     try:
         # Log basic request info
-        logging.info(f"Request: {request.method} {request.url.path} from {request.client}")
+        logging.info(
+            f"Request: {request.method} {request.url.path} from {request.client}"
+        )
         response = await call_next(request)
         return response
     except Exception as e:
         logging.error(f"Request processing error: {e}")
         raise
+
 
 # Allow all CORS origins for ease of testing; adjust as needed
 app.add_middleware(
@@ -76,11 +80,122 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount the official MCP server at /mcp path
-# Note: FastMCP HTTP transport may not work when mounted - using alternative approach
-with suppress(Exception):
-    # If mounting fails, we'll provide alternative endpoints
-    app.mount("/mcp", mcp.streamable_http_app())
+# HTTP MCP endpoints for ChatGPT Developer Mode integration
+# These are different from the stdio-based MCP server - they're HTTP REST endpoints
+
+
+@app.get("/mcp/ping")
+async def mcp_ping() -> dict[str, str]:
+    """MCP ping endpoint for ChatGPT health checks."""
+    return {"status": "pong", "message": "Splitwise MCP server is operational"}
+
+
+@app.post("/mcp/list_groups")
+async def mcp_list_groups(request: Request) -> dict[str, Any]:
+    """List all groups via HTTP MCP endpoint for ChatGPT."""
+    try:
+        client: SplitwiseClient = request.app.state.client
+        result = await asyncio.to_thread(client.call_mapped_method, "list_groups")
+        response_data = client.convert(result)
+
+        # Persist to database
+        try:
+            insert_document("list_groups", {"response": response_data})
+            log_operation("list_groups", "HTTP_MCP_ENDPOINT", {}, response_data)
+        except Exception as db_exc:
+            logging.warning(f"Database operation failed for list_groups: {db_exc}")
+
+        return response_data
+    except Exception as exc:
+        logging.error(f"Error in mcp_list_groups: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/mcp/add_expense")
+async def mcp_add_expense(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+    """Add expense via HTTP MCP endpoint for ChatGPT."""
+    try:
+        client: SplitwiseClient = request.app.state.client
+
+        # Convert payload to the format expected by create_expense
+        result = await asyncio.to_thread(
+            client.call_mapped_method, "create_expense", **payload
+        )
+        response_data = client.convert(result)
+
+        # Persist to database
+        try:
+            insert_document(
+                "create_expense", {"request": payload, "response": response_data}
+            )
+            log_operation("create_expense", "HTTP_MCP_ENDPOINT", payload, response_data)
+        except Exception as db_exc:
+            logging.warning(f"Database operation failed for create_expense: {db_exc}")
+
+        return response_data
+    except Exception as exc:
+        logging.error(f"Error in mcp_add_expense: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/mcp/get_expenses")
+async def mcp_get_expenses(
+    request: Request,
+    group_id: int | None = None,
+    friend_id: int | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """Get expenses via HTTP MCP endpoint for ChatGPT."""
+    try:
+        client: SplitwiseClient = request.app.state.client
+
+        # Build parameters
+        params = {"limit": limit, "offset": offset}
+        if group_id:
+            params["group_id"] = group_id
+        if friend_id:
+            params["friend_id"] = friend_id
+
+        result = await asyncio.to_thread(
+            client.call_mapped_method, "list_expenses", **params
+        )
+        response_data = client.convert(result)
+
+        # Persist to database
+        try:
+            insert_document(
+                "list_expenses", {"request": params, "response": response_data}
+            )
+            log_operation("list_expenses", "HTTP_MCP_ENDPOINT", params, response_data)
+        except Exception as db_exc:
+            logging.warning(f"Database operation failed for list_expenses: {db_exc}")
+
+        return response_data
+    except Exception as exc:
+        logging.error(f"Error in mcp_get_expenses: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+# ChatGPT Developer Mode manifest
+@app.get("/.well-known/ai-plugin.json")
+async def get_ai_plugin_manifest() -> dict[str, Any]:
+    """Return the AI plugin manifest for ChatGPT Developer Mode discovery."""
+    return {
+        "schema_version": "v1",
+        "name_for_model": "splitwise_mcp",
+        "name_for_human": "Splitwise Expense Manager",
+        "description_for_model": "Access and manage Splitwise expenses, groups, and friends. Split bills, track expenses, and manage group finances through the Splitwise API.",
+        "description_for_human": "Manage your Splitwise expenses and split bills with friends and groups.",
+        "auth": {"type": "bearer", "authorization_type": "Bearer"},
+        "api": {
+            "type": "openapi",
+            "url": f"{os.getenv('BASE_URL', 'https://sw-mcp.paulakimenko.xyz')}/openapi.json",
+        },
+        "logo_url": "https://www.splitwise.com/assets/press/logos/sw.svg",
+        "contact_email": "support@example.com",
+        "legal_info_url": "https://www.splitwise.com/terms",
+    }
 
 
 # Alternative MCP testing endpoint for development/testing
