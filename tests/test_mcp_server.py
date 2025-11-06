@@ -216,7 +216,7 @@ class TestMCPResources:
 
         result = await get_group_by_name("Test Group", mock_context)
 
-        assert result == "{'id': 123, 'name': 'Test Group'}"
+        assert result == '{"id": 123, "name": "Test Group"}'
         mock_client.get_group_by_name.assert_called_once_with("Test Group")
 
     @pytest.mark.asyncio
@@ -228,21 +228,7 @@ class TestMCPResources:
         mock_client.get_group_by_name.return_value = None
 
         result = await get_group_by_name("NonExistent", mock_context)
-        assert result == "Group 'NonExistent' not found"
-
-    @pytest.mark.asyncio
-    async def test_balance_resource(self, mock_context):
-        """Test balance resource."""
-        from app.mcp_server import get_balance
-
-        mock_client = mock_context.request_context.lifespan_context["client"]
-        mock_client.call_mapped_method.return_value = {"total_balance": "150.00"}
-        mock_client.convert.return_value = {"converted": "data"}
-
-        result = await get_balance(mock_context)
-
-        assert result == "{'converted': 'data'}"
-        mock_client.call_mapped_method.assert_called_once_with("get_current_user")
+        assert result == '{"error": "Group \'NonExistent\' not found"}'
 
 
 class TestHelperFunction:

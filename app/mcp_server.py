@@ -90,7 +90,13 @@ async def get_current_user(ctx: Context) -> dict[str, Any]:
 @mcp.tool()
 async def list_groups(ctx: Context) -> dict[str, Any]:
     """List all groups for the current user."""
-    return await _call_splitwise_method(ctx, "list_groups")
+    groups_data = await _call_splitwise_method(ctx, "list_groups")
+
+    # Splitwise SDK returns groups as a list, but MCP tools should return dict
+    # Wrap in proper API response format to match Splitwise API specification
+    if isinstance(groups_data, list):
+        return {"groups": groups_data}
+    return groups_data
 
 
 @mcp.tool()
@@ -119,7 +125,13 @@ async def list_expenses(
     if dated_before is not None:
         args["dated_before"] = dated_before
 
-    return await _call_splitwise_method(ctx, "list_expenses", **args)
+    expenses_data = await _call_splitwise_method(ctx, "list_expenses", **args)
+
+    # Splitwise SDK returns expenses as a list, but MCP tools should return dict
+    # Wrap in proper API response format to match Splitwise API specification
+    if isinstance(expenses_data, list):
+        return {"expenses": expenses_data}
+    return expenses_data
 
 
 @mcp.tool()
@@ -131,7 +143,13 @@ async def get_expense(expense_id: int, ctx: Context) -> dict[str, Any]:
 @mcp.tool()
 async def list_friends(ctx: Context) -> dict[str, Any]:
     """List all friends for the current user."""
-    return await _call_splitwise_method(ctx, "list_friends")
+    friends_data = await _call_splitwise_method(ctx, "list_friends")
+
+    # Splitwise SDK returns friends as a list, but MCP tools should return dict
+    # Wrap in proper API response format to match Splitwise API specification
+    if isinstance(friends_data, list):
+        return {"friends": friends_data}
+    return friends_data
 
 
 @mcp.tool()
@@ -143,13 +161,25 @@ async def get_friend(friend_id: int, ctx: Context) -> dict[str, Any]:
 @mcp.tool()
 async def list_categories(ctx: Context) -> dict[str, Any]:
     """List all expense categories."""
-    return await _call_splitwise_method(ctx, "list_categories")
+    categories_data = await _call_splitwise_method(ctx, "list_categories")
+
+    # Splitwise SDK returns categories as a list, but MCP tools should return dict
+    # Wrap in proper API response format to match Splitwise API specification
+    if isinstance(categories_data, list):
+        return {"categories": categories_data}
+    return categories_data
 
 
 @mcp.tool()
 async def list_currencies(ctx: Context) -> dict[str, Any]:
     """List all supported currencies."""
-    return await _call_splitwise_method(ctx, "list_currencies")
+    currencies_data = await _call_splitwise_method(ctx, "list_currencies")
+
+    # Splitwise SDK returns currencies as a list, but MCP tools should return dict
+    # Wrap in proper API response format to match Splitwise API specification
+    if isinstance(currencies_data, list):
+        return {"currencies": currencies_data}
+    return currencies_data
 
 
 @mcp.tool()
@@ -168,30 +198,31 @@ async def list_notifications(
     if limit > 0:
         args["limit"] = limit
 
-    return await _call_splitwise_method(ctx, "list_notifications", **args)
+    notifications_data = await _call_splitwise_method(ctx, "list_notifications", **args)
+
+    # Splitwise SDK returns notifications as a list, but MCP tools should return dict
+    # Wrap in proper API response format to match Splitwise API specification
+    if isinstance(notifications_data, list):
+        return {"notifications": notifications_data}
+    return notifications_data
 
 
 # Resource for group information by name
 @mcp.resource("splitwise://group/{name}")
 async def get_group_by_name(name: str, ctx: Context) -> str:
     """Get group information by name."""
+    import json
+    from urllib.parse import unquote
+
     client = ctx.request_context.lifespan_context["client"]
-    group = client.get_group_by_name(name)
+    # URL decode the name in case it contains special characters
+    decoded_name = unquote(name)
+    group = client.get_group_by_name(decoded_name)
     if not group:
-        return f"Group '{name}' not found"
+        return json.dumps({"error": f"Group '{decoded_name}' not found"})
 
     converted = client.convert(group)
-    return str(converted)
-
-
-# Resource for user balance information
-@mcp.resource("splitwise://balance")
-async def get_balance(ctx: Context) -> str:
-    """Get current user balance information."""
-    client = ctx.request_context.lifespan_context["client"]
-    result = client.call_mapped_method("get_current_user")
-    converted = client.convert(result)
-    return str(converted)
+    return json.dumps(converted)
 
 
 # Entry point for running the MCP server
