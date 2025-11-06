@@ -213,6 +213,173 @@ async def notifications_resource(ctx: Context) -> str:
     return await _call_splitwise_resource(ctx, "list_notifications")
 
 
+# MCP Tools for ChatGPT Connector Compatibility (REQUIRED)
+
+
+@mcp.tool()
+async def search(query: str, ctx: Context) -> dict[str, Any]:
+    """Search across Splitwise data (expenses, groups, friends) based on query.
+
+    This tool is REQUIRED for ChatGPT connectors.
+    Returns a list of search results with id, title, and url for each match.
+    """
+    client = ctx.request_context.lifespan_context["client"]
+    results = []
+
+    try:
+        # Search in groups
+        groups_data = await asyncio.to_thread(client.call_mapped_method, "list_groups")
+        groups = client.convert(groups_data)
+        if isinstance(groups, list):
+            for group in groups:
+                if query.lower() in str(group.get("name", "")).lower():
+                    results.append(
+                        {
+                            "id": f"group_{group.get('id')}",
+                            "title": f"Group: {group.get('name')}",
+                            "url": f"splitwise://group/{group.get('id')}",
+                        }
+                    )
+
+        # Search in expenses
+        expenses_data = await asyncio.to_thread(
+            client.call_mapped_method, "list_expenses", limit=100
+        )
+        expenses = client.convert(expenses_data)
+        if isinstance(expenses, list):
+            for expense in expenses:
+                desc = str(expense.get("description", ""))
+                if query.lower() in desc.lower():
+                    results.append(
+                        {
+                            "id": f"expense_{expense.get('id')}",
+                            "title": f"Expense: {desc} - ${expense.get('cost', 0)}",
+                            "url": f"splitwise://expense/{expense.get('id')}",
+                        }
+                    )
+
+        # Search in friends
+        friends_data = await asyncio.to_thread(
+            client.call_mapped_method, "list_friends"
+        )
+        friends = client.convert(friends_data)
+        if isinstance(friends, list):
+            for friend in friends:
+                name = f"{friend.get('first_name', '')} {friend.get('last_name', '')}".strip()
+                if query.lower() in name.lower():
+                    results.append(
+                        {
+                            "id": f"friend_{friend.get('id')}",
+                            "title": f"Friend: {name}",
+                            "url": f"splitwise://friend/{friend.get('id')}",
+                        }
+                    )
+
+        # Limit to top 10 results
+        results = results[:10]
+
+        # Log the operation
+        try:
+            insert_document(
+                "search",
+                {"request": {"query": query}, "response": {"results": results}},
+            )
+            log_operation("search", "TOOL_CALL", {"query": query}, {"results": results})
+        except Exception as db_exc:
+            logging.warning(f"Database operation failed for search: {db_exc}")
+
+        # Return in the exact format ChatGPT expects
+        return {"results": results}
+
+    except Exception as exc:
+        logging.error(f"Search failed: {exc}")
+        with suppress(Exception):
+            log_operation("search", "TOOL_CALL", {"query": query}, None, str(exc))
+        raise
+
+
+@mcp.tool()
+async def fetch(id: str, ctx: Context) -> dict[str, Any]:
+    """Fetch full details of a specific item by ID.
+
+    This tool is REQUIRED for ChatGPT connectors.
+    Returns complete information about a group, expense, or friend.
+    """
+    client = ctx.request_context.lifespan_context["client"]
+
+    try:
+        # Parse the ID to determine type and actual ID
+        if id.startswith("group_"):
+            actual_id = int(id.replace("group_", ""))
+            data = await asyncio.to_thread(
+                client.call_mapped_method, "get_group", id=actual_id
+            )
+            result_data = client.convert(data)
+
+            result = {
+                "id": id,
+                "title": f"Group: {result_data.get('name')}",
+                "text": json.dumps(result_data, indent=2),
+                "url": f"splitwise://group/{actual_id}",
+                "metadata": {
+                    "type": "group",
+                    "member_count": len(result_data.get("members", [])),
+                },
+            }
+
+        elif id.startswith("expense_"):
+            actual_id = int(id.replace("expense_", ""))
+            data = await asyncio.to_thread(
+                client.call_mapped_method, "get_expense", id=actual_id
+            )
+            result_data = client.convert(data)
+
+            result = {
+                "id": id,
+                "title": f"Expense: {result_data.get('description')}",
+                "text": json.dumps(result_data, indent=2),
+                "url": f"splitwise://expense/{actual_id}",
+                "metadata": {
+                    "type": "expense",
+                    "amount": result_data.get("cost"),
+                    "currency": result_data.get("currency_code"),
+                },
+            }
+
+        elif id.startswith("friend_"):
+            actual_id = int(id.replace("friend_", ""))
+            data = await asyncio.to_thread(
+                client.call_mapped_method, "get_friend", id=actual_id
+            )
+            result_data = client.convert(data)
+
+            name = f"{result_data.get('first_name', '')} {result_data.get('last_name', '')}".strip()
+            result = {
+                "id": id,
+                "title": f"Friend: {name}",
+                "text": json.dumps(result_data, indent=2),
+                "url": f"splitwise://friend/{actual_id}",
+                "metadata": {"type": "friend", "email": result_data.get("email")},
+            }
+        else:
+            raise ValueError(f"Invalid ID format: {id}")
+
+        # Log the operation
+        try:
+            insert_document("fetch", {"request": {"id": id}, "response": result})
+            log_operation("fetch", "TOOL_CALL", {"id": id}, result)
+        except Exception as db_exc:
+            logging.warning(f"Database operation failed for fetch: {db_exc}")
+
+        return result
+
+    except Exception as exc:
+        logging.error(f"Fetch failed for {id}: {exc}")
+        with suppress(Exception):
+            log_operation("fetch", "TOOL_CALL", {"id": id}, None, str(exc))
+        raise
+
+
 # MCP Tools for POST methods (actions with side effects)
 
 

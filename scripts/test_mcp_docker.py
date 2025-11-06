@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Test script to verify MCP server works in Docker with Streamable HTTP transport."""
 
-import sys
-
 import requests
 
 
