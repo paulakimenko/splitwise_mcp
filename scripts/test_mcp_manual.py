@@ -30,13 +30,15 @@ async def mcp_http_session(base_url: str = "http://localhost:8000/mcp"):
         yield client, base_url
 
 
-async def read_mcp_resource(client: httpx.AsyncClient, base_url: str, resource_uri: str):
+async def read_mcp_resource(
+    client: httpx.AsyncClient, base_url: str, resource_uri: str
+):
     """Read a specific MCP resource via Streamable HTTP transport."""
     request = {
         "jsonrpc": "2.0",
         "id": 5,
         "method": "resources/read",
-        "params": {"uri": resource_uri}
+        "params": {"uri": resource_uri},
     }
 
     response = await client.post(
@@ -53,12 +55,7 @@ async def list_tools(client: httpx.AsyncClient, base_url: str) -> dict[str, Any]
         client: HTTP client for making requests
         base_url: MCP server URL (e.g., http://localhost:8000/mcp)
     """
-    request = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/list",
-        "params": {}
-    }
+    request = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
 
     response = await client.post(
         base_url, headers={"Content-Type": "application/json"}, json=request
@@ -68,7 +65,10 @@ async def list_tools(client: httpx.AsyncClient, base_url: str) -> dict[str, Any]
 
 
 async def call_tool(
-    client: httpx.AsyncClient, base_url: str, tool_name: str, arguments: dict[str, Any] | None = None
+    client: httpx.AsyncClient,
+    base_url: str,
+    tool_name: str,
+    arguments: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Call a specific MCP tool via Streamable HTTP transport.
 
@@ -82,10 +82,7 @@ async def call_tool(
         "jsonrpc": "2.0",
         "id": 3,
         "method": "tools/call",
-        "params": {
-            "name": tool_name,
-            "arguments": arguments or {}
-        }
+        "params": {"name": tool_name, "arguments": arguments or {}},
     }
 
     response = await client.post(
@@ -97,12 +94,7 @@ async def call_tool(
 
 async def list_mcp_resources(client: httpx.AsyncClient, base_url: str):
     """List available MCP resources via Streamable HTTP transport."""
-    request = {
-        "jsonrpc": "2.0",
-        "id": 4,
-        "method": "resources/list",
-        "params": {}
-    }
+    request = {"jsonrpc": "2.0", "id": 4, "method": "resources/list", "params": {}}
 
     response = await client.post(
         base_url, headers={"Content-Type": "application/json"}, json=request

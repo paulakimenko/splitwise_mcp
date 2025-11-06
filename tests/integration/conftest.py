@@ -1,8 +1,13 @@
 """Integration test configuration and fixtures."""
 
 import os
+import subprocess
+import time
+from pathlib import Path
+from threading import Thread
 
 import pytest
+import requests
 from dotenv import load_dotenv
 
 from app.splitwise_client import SplitwiseClient
@@ -108,3 +113,72 @@ def mcp_test_config():
             os.getenv("SPLITWISE_API_KEY") or os.getenv("SPLITWISE_CONSUMER_KEY")
         ),
     }
+
+
+@pytest.fixture(scope="session")
+def mcp_server_process():
+    """Start MCP server for HTTP testing."""
+    # Check if server is already running
+    base_url = os.getenv("MCP_BASE_URL", "http://localhost:8000/mcp")
+
+    def is_server_running():
+        try:
+            response = requests.get(base_url.replace("/mcp", "/"), timeout=2)
+            return True
+        except requests.exceptions.RequestException:
+            return False
+
+    if is_server_running():
+        print(f"MCP server already running at {base_url}")
+        yield base_url
+        return
+
+    # Start the MCP server with HTTP transport
+    server_process = None
+    try:
+        # Set environment variables for HTTP transport
+        env = os.environ.copy()
+        env.update(
+            {
+                "MCP_TRANSPORT": "streamable-http",
+                "MCP_HOST": "127.0.0.1",
+                "MCP_PORT": "8000",
+            }
+        )
+
+        print("Starting MCP server for HTTP testing...")
+        server_process = subprocess.Popen(
+            [".venv/bin/python", "-m", "app.mcp_server"],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=Path(__file__).parent.parent.parent,
+        )
+
+        # Wait for server to start
+        max_attempts = 30
+        for _attempt in range(max_attempts):
+            if is_server_running():
+                print(f"MCP server started successfully at {base_url}")
+                break
+            time.sleep(1)
+        else:
+            # Server didn't start - get error output
+            stdout, stderr = server_process.communicate(timeout=5)
+            raise RuntimeError(
+                f"MCP server failed to start after {max_attempts}s. "
+                f"stdout: {stdout.decode()}, stderr: {stderr.decode()}"
+            )
+
+        yield base_url
+
+    finally:
+        # Clean up server process
+        if server_process and server_process.poll() is None:
+            print("Shutting down MCP server...")
+            server_process.terminate()
+            try:
+                server_process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                server_process.kill()
+                server_process.wait()

@@ -12,7 +12,7 @@ class TestPureMCPImplementation:
 
     def test_mcp_server_import(self):
         """Test that the MCP server can be imported without FastAPI dependencies."""
-        from app.mcp_server import mcp
+        from app.main import mcp
 
         assert mcp is not None
         assert hasattr(mcp, "tool")
@@ -68,9 +68,9 @@ class TestPureMCPImplementation:
         from pathlib import Path
 
         # Get the source file path
-        import app.mcp_server
+        import app.main
 
-        source_file = Path(inspect.getfile(app.mcp_server))
+        source_file = Path(inspect.getfile(app.main))
 
         # Parse the AST
         with source_file.open(encoding="utf-8") as f:
