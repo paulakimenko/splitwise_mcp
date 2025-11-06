@@ -4,7 +4,11 @@ These tests validate the custom business logic endpoints work correctly
 with real Splitwise data and our test group.
 """
 
+import asyncio
+
+import pytest
 from fastapi.testclient import TestClient
+from splitwise.user import User
 
 
 class TestCustomEndpointsIntegration:
@@ -22,8 +26,6 @@ class TestCustomEndpointsIntegration:
 
         # Skip if MongoDB is not available (connection refused)
         if response.status_code == 400 and "Connection refused" in response.text:
-            import pytest
-
             pytest.skip("MongoDB not available for integration tests")
 
         assert response.status_code == 200
@@ -44,8 +46,6 @@ class TestCustomEndpointsIntegration:
 
         # Skip if MongoDB is not available (connection refused)
         if response.status_code == 400 and "Connection refused" in response.text:
-            import pytest
-
             pytest.skip("MongoDB not available for integration tests")
 
         assert response.status_code == 200
@@ -69,8 +69,6 @@ class TestCustomEndpointsIntegration:
         """Test adding an expense with equal split using the custom endpoint."""
 
         # First, manually add MCP TEST as a friend to the test group using the splitwise_client directly
-        from splitwise.user import User
-
         try:
             # Try to add MCP TEST user to the group
             # Note: This will work if MCP TEST is an existing friend
@@ -80,8 +78,6 @@ class TestCustomEndpointsIntegration:
             user.setEmail("mcp.test@example.com")
 
             # Add user to group using the raw client
-            import asyncio
-
             asyncio.run(
                 asyncio.to_thread(
                     splitwise_client.raw_client.addUserToGroup, user, test_group_id
@@ -89,8 +85,6 @@ class TestCustomEndpointsIntegration:
             )
         except Exception:
             # If adding the user fails, skip this test
-            import pytest
-
             pytest.skip(
                 "Could not add MCP TEST user to test group - user may not exist as friend"
             )
@@ -111,8 +105,6 @@ class TestCustomEndpointsIntegration:
 
         # Skip if MongoDB is not available (connection refused)
         if response.status_code == 400 and "Connection refused" in response.text:
-            import pytest
-
             pytest.skip("MongoDB not available for integration tests")
 
         # Should succeed and return expense details

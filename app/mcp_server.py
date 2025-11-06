@@ -7,9 +7,12 @@ replacing the custom /mcp/{method_name} proxy routes with native MCP tools.
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import Any
+from urllib.parse import unquote
 
 from mcp.server.fastmcp import Context, FastMCP
 
@@ -64,15 +67,13 @@ async def _call_splitwise_method(
         try:
             insert_document(method_name, {"response": response_data})
             log_operation(method_name, "TOOL_CALL", kwargs, response_data)
-        except Exception:
-            # Silently continue if database operations fail
-            pass
+        except Exception as db_exc:
+            # Log database connection issues but continue operation
+            logging.warning(f"Database operation failed for {method_name}: {db_exc}")
 
         return response_data
     except Exception as exc:
         # Try to log the error, but don't fail if database is unavailable
-        from contextlib import suppress
-
         with suppress(Exception):
             log_operation(method_name, "TOOL_CALL", kwargs, None, str(exc))
         raise
@@ -211,9 +212,6 @@ async def list_notifications(
 @mcp.resource("splitwise://group/{name}")
 async def get_group_by_name(name: str, ctx: Context) -> str:
     """Get group information by name."""
-    import json
-    from urllib.parse import unquote
-
     client = ctx.request_context.lifespan_context["client"]
     # URL decode the name in case it contains special characters
     decoded_name = unquote(name)

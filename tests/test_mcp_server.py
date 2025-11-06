@@ -115,8 +115,8 @@ class TestMCPTools:
         """Test list_expenses tool with filters."""
         with (
             patch("app.mcp_server.asyncio.to_thread") as mock_to_thread,
-            patch("app.mcp_server.insert_document") as mock_insert,
-            patch("app.mcp_server.log_operation") as mock_log,
+            patch("app.mcp_server.insert_document"),
+            patch("app.mcp_server.log_operation"),
         ):
             from app.mcp_server import list_expenses
 

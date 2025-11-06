@@ -6,10 +6,8 @@ over the actual MCP protocol, providing comprehensive validation.
 
 from __future__ import annotations
 
-import asyncio
 import os
 from contextlib import asynccontextmanager
-from typing import Any
 
 import pytest
 from mcp import ClientSession, StdioServerParameters

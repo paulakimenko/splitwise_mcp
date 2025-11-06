@@ -350,8 +350,12 @@ async def custom_add_expense_equal(
             params=payload.model_dump(),
             response=response_data,
         )
-    except Exception:
-        # Silently continue if database operations fail
-        pass
+    except Exception as db_exc:
+        # Log database connection issues but continue operation
+        import logging
+
+        logging.warning(
+            f"Database operation failed for add_expense_equal_split: {db_exc}"
+        )
 
     return response_data
