@@ -17,6 +17,27 @@ This is a **FastAPI-based Model Context Protocol (MCP) server** that integrates 
 - **`app/db.py`** - MongoDB utilities with timestamp-based document insertion
 - **`app/models.py`** - Pydantic request/response schemas
 
+### Splitwise API Reference
+
+**For all Splitwise domain model, API endpoints, data structures, and integration questions, refer to the complete OpenAPI specification:**
+
+📋 **[Splitwise OpenAPI 3.0 Specification](docs-for-copilot/splitwise-openapi.json)**
+
+This specification includes:
+- Complete API endpoint definitions and parameters
+- Request/response schemas for all data structures (User, Group, Expense, etc.)
+- Authentication methods (OAuth2, API Key)
+- Field descriptions, validation rules, and examples
+- Business logic constraints and relationships
+- Error response formats and status codes
+
+Use this reference when:
+- Understanding Splitwise data models (expenses, groups, users, friends)
+- Implementing new MCP tools or REST endpoints
+- Validating API parameters and response formats
+- Debugging integration issues or data mapping
+- Adding new features that interact with Splitwise APIs
+
 ## Critical Patterns
 
 ### Method Mapping Pattern
