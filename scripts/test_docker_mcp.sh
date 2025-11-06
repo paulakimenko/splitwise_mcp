@@ -29,8 +29,8 @@ python3 scripts/test_mcp_docker.py
 
 echo ""
 echo "✅ MCP Server is running!"
-echo "🌐 Access the API at: http://localhost:8000"
-echo "📚 View API docs at: http://localhost:8000/docs"
-echo "🔧 MCP tools at: http://localhost:8000/mcp-test/list-tools"
+echo "🌐 MCP endpoint at: http://localhost:8000/mcp"
+echo "� Transport: Streamable HTTP"
+echo "� Protocol: JSON-RPC over HTTP"
 echo ""
 echo "To stop the services, run: docker-compose down"

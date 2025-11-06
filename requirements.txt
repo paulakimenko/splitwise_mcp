@@ -1,11 +1,6 @@
-# Python dependencies for the Splitwise MCP service
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
+# Python dependencies for the Splitwise MCP server (Pure MCP SDK)
+mcp[cli]>=1.0.0
 pymongo[srv]>=4.5.0
-python-dotenv>=1.0.0
 splitwise>=3.0.0
-prettytable>=3.8.0
-pandas>=2.1.0
 python-dateutil>=2.8.2
 typing-extensions>=4.7.1
-mcp[cli]>=1.0.0

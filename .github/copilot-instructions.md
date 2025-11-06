@@ -2,20 +2,35 @@
 
 ## Architecture Overview
 
-This is a **FastAPI-based Model Context Protocol (MCP) server** that integrates the Splitwise API with the official Python MCP SDK, providing both MCP tools for AI agents and REST endpoints for traditional clients. The service follows a three-layer architecture:
+This is a **pure Model Context Protocol (MCP) server** built with the official Python MCP SDK (FastMCP) that integrates the Splitwise API for AI agents. The service provides MCP tools for expense management operations and resources for data access.
 
-1. **MCP Server Layer** (`/mcp`) - Official MCP SDK server with tools and resources for AI agent integration
-2. **REST Cache Layer** (`/groups`, `/expenses`, etc.) - Read-only endpoints serving cached MongoDB data
-3. **Custom Helpers** (`/custom/*`) - Localized business logic for common expense scenarios
+### MCP SDK Reference
+
+**For complete MCP SDK documentation, patterns, and best practices:**
+
+📋 **[Official MCP Python SDK Documentation](docs-for-copilot/MCP_SDK_README.md)**
+
+The official SDK documentation covers:
+- FastMCP server architecture and lifecycle management  
+- Tools, Resources, and Prompts implementation patterns
+- Context injection and lifespan management
+- Authentication and authorization
+- Client development and integration
+- Transport options (stdio, StreamableHTTP, SSE)
+- Advanced features like structured output and pagination
+
+### Architecture Components
+
+The pure MCP implementation provides:
 
 ### Key Components
 
-- **`app/main.py`** - FastAPI app with route definitions, dependency injection, and MCP server mounting
-- **`app/mcp_server.py`** - Official MCP server implementation with tools, resources, and lifespan management
-- **`app/splitwise_client.py`** - Wrapper around `splitwise` SDK with method mapping and data conversion
+- **`app/mcp_server.py`** - Pure MCP FastMCP server with tools, resources, and lifespan management
+- **`app/splitwise_client.py`** - Wrapper around `splitwise` SDK with method mapping and data conversion  
 - **`app/custom_methods.py`** - Higher-level business logic (expense filtering, reports)
 - **`app/db.py`** - MongoDB utilities with timestamp-based document insertion
-- **`app/models.py`** - Pydantic request/response schemas
+- **`app/utils.py`** - Utility functions for object serialization and data conversion
+- **`app/logging_utils.py`** - Logging helpers for operation tracking and audit trails
 
 ### Splitwise API Reference
 
@@ -90,14 +105,14 @@ result = await asyncio.to_thread(client.call_mapped_method, method_name, **args)
 ```
 
 ### MCP Tool Pattern
-All MCP tools use the `_call_splitwise_method` helper for consistent async operations and persistence:
+All MCP tools use the `_call_splitwise_tool` helper for consistent async operations and persistence:
 ```python
 @mcp.tool()
 async def get_current_user(ctx: Context) -> dict[str, Any]:
     """Get current authenticated user information."""
-    return await _call_splitwise_method(ctx, "get_current_user")
+    return await _call_splitwise_tool(ctx, "get_current_user")
 
-async def _call_splitwise_method(ctx: Context, method_name: str, **kwargs) -> dict[str, Any]:
+async def _call_splitwise_tool(ctx: Context, method_name: str, **kwargs) -> dict[str, Any]:
     """Helper function for MCP tools with consistent async handling and persistence."""
     client = ctx.request_context.lifespan_context["client"]
     result = await asyncio.to_thread(client.call_mapped_method, method_name, **kwargs)
@@ -108,7 +123,7 @@ async def _call_splitwise_method(ctx: Context, method_name: str, **kwargs) -> di
 ```
 
 ### Localized Business Logic
-Custom endpoints serve common business scenarios with descriptive field names in Pydantic models:
+Custom methods serve common business scenarios with descriptive field names in Pydantic models:
 ```python
 group_name: str = Field(..., description="Group name")
 amount: float = Field(..., description="Expense amount")
@@ -122,6 +137,11 @@ Required environment variables:
 - `MONGO_URI` - MongoDB connection (defaults to `mongodb://localhost:27017`)
 - `DB_NAME` - Database name (defaults to `splitwise`)
 
+**MCP Transport Configuration** (for remote operation):
+- `MCP_TRANSPORT` - Transport mode: `stdio` (default) or `streamable-http` for remote access
+- `MCP_HOST` - Host to bind to (defaults to `0.0.0.0` for HTTP transport)
+- `MCP_PORT` - Port for HTTP transport (defaults to `8000`)
+
 ### Quick Start with Makefile
 The project includes a comprehensive Makefile for all development operations:
 
@@ -130,7 +150,7 @@ The project includes a comprehensive Makefile for all development operations:
 make setup                    # Creates venv, installs deps, creates .env
 
 # Development server
-make dev                      # Start FastAPI server with reload
+make dev                      # Start MCP server with stdio transport
 
 # Testing
 make unit-test               # Run unit tests only
@@ -172,27 +192,60 @@ pip install -r requirements-dev.txt
 cp .env.example .env
 # Edit .env and add your SPLITWISE_API_KEY
 
-# Start development server
-uvicorn app.main:app --reload
+# Start development server  
+python -m app.mcp_server  # Pure MCP server via stdio
 ```
 
 ### Docker Development
-Use `docker-compose.yml` for full stack with MongoDB:
+Use `docker-compose.yml` for full stack with MongoDB and Streamable HTTP transport:
 ```bash
 docker-compose up --build
 ```
 
+**Remote Access Configuration:**
+- The Docker deployment uses **Streamable HTTP transport** for remote access
+- Server runs on port `8000` and is accessible at `http://localhost:8000/mcp`
+- MCP clients can connect remotely using the Streamable HTTP transport
+- Environment variables `MCP_TRANSPORT=streamable-http`, `MCP_HOST=0.0.0.0`, `MCP_PORT=8000` are pre-configured
+
 ### Adding New MCP Tools
 1. Add mapping to `SplitwiseClient.METHOD_MAP` if not already present
 2. Add tool function in `app/mcp_server.py` with `@mcp.tool()` decorator
-3. Use `await _call_splitwise_method(ctx, "method_name", **args)` for Splitwise API calls
+3. Use `await _call_splitwise_tool(ctx, "method_name", **args)` for Splitwise API calls
 4. Add tests to `tests/test_mcp_server.py`
-5. Add REST endpoint in `main.py` if cached access is desired
 
 ### Adding Custom Helpers
 1. Implement async function in `custom_methods.py` taking `SplitwiseClient` parameter  
-2. Add route in `main.py` under `/custom/*` path
-3. Create Pydantic model in `models.py` if complex request body needed
+2. Add MCP tool in `mcp_server.py` that calls the custom method
+3. Create Pydantic model in `models.py` if complex parameter validation needed
+
+## Streamable HTTP Transport (Required for Remote Operation)
+
+The MCP server **requires Streamable HTTP transport** for remote operation and Docker deployment, enabling MCP clients to connect over HTTP from any machine.
+
+### Configuration
+The server automatically detects transport mode via environment variables:
+- `MCP_TRANSPORT=streamable-http` - Enables HTTP transport (required for Docker)
+- `MCP_HOST=0.0.0.0` - Binds to all interfaces for remote access
+- `MCP_PORT=8000` - HTTP server port (exposed by Docker)
+
+### Client Connection
+Remote MCP clients connect to: `http://localhost:8000/mcp`
+
+### Local vs. Remote Operation
+- **Local Development**: Uses `stdio` transport by default
+- **Docker/Remote**: Uses `streamable-http` transport for network access
+- **Production**: Streamable HTTP enables multi-client access and load balancing
+
+### Environment Detection
+```python
+# Server automatically chooses transport based on MCP_TRANSPORT environment
+transport = os.environ.get("MCP_TRANSPORT", "stdio")
+if transport == "streamable-http":
+    mcp.run(transport="streamable-http", host="0.0.0.0", port=8000)
+else:
+    mcp.run()  # stdio transport
+```
 
 ## Data Flow Patterns
 
@@ -201,7 +254,7 @@ docker-compose up --build
 2. No Splitwise API calls for GET endpoints (pure cache reads)
 
 ### MCP Tool Operations  
-1. AI agent calls MCP tool → `_call_splitwise_method()` → `asyncio.to_thread()` → Splitwise API
+1. AI agent calls MCP tool → `_call_splitwise_tool()` → `asyncio.to_thread()` → Splitwise API
 2. Response auto-persisted to MongoDB with timestamp
 3. Operation logged to `logs` collection with "TOOL_CALL" action type
 
@@ -231,9 +284,12 @@ docker-compose up --build
 
 ### Docker Deployment
 - **Pre-built Image**: `paulakimenko/splitwise-mcp:latest` available on Docker Hub
+- **Transport Mode**: Uses **Streamable HTTP transport** for remote operation in Docker
+- **Network Access**: Exposed on port `8000` at endpoint `http://localhost:8000/mcp`
 - **Build Process**: Multi-stage build with system dependencies for `pymongo` compilation
 - **Registry Configuration**: Set `DOCKER_REGISTRY`, `DOCKER_IMAGE_NAME`, `DOCKER_TAG` in `.env`
 - **Service Discovery**: Container names (`mongo:27017`) for docker-compose
+- **Remote Client Support**: MCP clients can connect from any machine using HTTP transport
 - **Development**: Volume mount for development (`./:/app:ro`)
 - **Makefile Commands**: `make docker-build`, `make docker-push`, `make docker-build-push`
 
@@ -275,10 +331,10 @@ Integration tests create a temporary test group in your Splitwise account:
 - **pytest** - Test framework with asyncio support
 
 ### Development Tools
-- **API Documentation**: `http://localhost:8000/docs` (Swagger UI)
-- **Logs Endpoint**: `GET /logs` returns recent operation audit trail
-- **Health Check**: `GET /health` returns service status with database connectivity details
-- **Error Patterns**: 404 for unmapped methods, 400 for SDK errors, 500 for internal errors
+- **MCP Inspector**: `uv run mcp dev app.mcp_server` for interactive testing
+- **Stdio Communication**: Direct MCP protocol via stdin/stdout
+- **Database Logging**: All operations logged to MongoDB with timestamps
+- **Error Patterns**: MCP protocol errors, SDK validation errors, Splitwise API errors
 
 ### CI/CD Pipeline
 - **GitHub Actions** - Automated testing on all pushes and PRs
@@ -377,36 +433,33 @@ async def test_mcp_tool(mock_context):
         assert result == {"converted": "data"}
 ```
 
-### FastAPI Patterns
-**Route Definitions:**
+### MCP Development Patterns
+**Tool Implementation:**
 ```python
-@app.post(
-    "/endpoint/{param}",
-    summary="Clear description",
-    responses={
-        404: {"description": "Not found"},
-        400: {"description": "Bad request"},
-        500: {"description": "Internal error"},
-    },
-)
-async def endpoint_function(
-    request: Request,
-    param: str = Path(..., description="Parameter description"),
-    body: ModelClass | None = None,
-) -> Any:
-    """Detailed docstring explaining endpoint functionality."""
+@mcp.tool()
+async def my_tool(param: str, ctx: Context) -> dict[str, Any]:
+    """Tool description for AI agents."""
+    return await _call_splitwise_method(ctx, "method_name", param=param)
 ```
 
-**Error Handling:**
+**Resource Implementation:**
 ```python
-try:
-    result = await asyncio.to_thread(client.method, **args)
-except AttributeError as exc:
-    log_operation(endpoint, method, params, None, str(exc))
-    raise HTTPException(status_code=404, detail=str(exc)) from exc
-except Exception as exc:
-    log_operation(endpoint, method, params, None, str(exc))
-    raise HTTPException(status_code=500, detail=str(exc)) from exc
+@mcp.resource("splitwise://resource/{name}")
+async def my_resource(name: str, ctx: Context) -> str:
+    """Resource description."""
+    client = ctx.request_context.lifespan_context["client"]
+    result = client.some_method(name)
+    return str(client.convert(result))
+```
+
+**Lifespan Management:**
+```python
+@asynccontextmanager
+async def mcp_lifespan(server: Server):
+    """MCP server lifespan with SplitwiseClient initialization."""
+    # Setup code - initialize client
+    yield {"client": client}
+    # Cleanup code if needed
 ```
 
 ### Database Patterns
@@ -495,7 +548,7 @@ import os
 from typing import Any
 
 # Third-party imports  
-from fastapi import FastAPI, HTTPException
+from mcp.server.fastmcp import FastMCP, Context
 from pydantic import BaseModel
 
 # Local imports
@@ -505,7 +558,7 @@ from .models import RequestModel
 ```
 
 ### Error Handling Philosophy
-- **Be Specific**: Use appropriate HTTP status codes (404 for not found, 400 for bad input, 500 for internal errors)
+- **Be Specific**: Use appropriate MCP error types (tool errors, validation errors, resource errors)
 - **Preserve Context**: Use `raise ... from exc` to maintain exception chains
 - **Log Everything**: All operations logged with context for debugging
 - **Fail Fast**: Validate inputs early and return clear error messages

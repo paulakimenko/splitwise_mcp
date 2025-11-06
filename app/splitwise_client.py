@@ -28,6 +28,7 @@ class SplitwiseClient:
     # Mapping from external MCP method names (snake_case) to
     # Splitwise SDK method names (camelCase).
     METHOD_MAP: dict[str, str] = {
+        # GET methods (read-only)
         "get_current_user": "getCurrentUser",
         "list_groups": "getGroups",
         "get_group": "getGroup",
@@ -39,6 +40,22 @@ class SplitwiseClient:
         "list_currencies": "getCurrencies",
         "get_exchange_rates": "getExchangeRates",
         "list_notifications": "getNotifications",
+        # POST methods (actions with side effects)
+        "create_expense": "createExpense",
+        "create_group": "createGroup",
+        "update_expense": "updateExpense",
+        "delete_expense": "deleteExpense",
+        "create_friend": "createFriend",
+        "delete_friend": "deleteFriend",
+        "add_user_to_group": "addUserToGroup",
+        "remove_user_from_group": "removeUserFromGroup",
+        "undelete_expense": "undeleteExpense",
+        "delete_group": "deleteGroup",
+        "undelete_group": "undeleteGroup",
+        "update_user": "updateUser",
+        "create_friends": "createFriends",
+        "create_comment": "createComment",
+        "delete_comment": "deleteComment",
         "get_balance": "getCurrentUser",  # Not a direct method; see notes
     }
 
