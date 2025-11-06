@@ -4,7 +4,6 @@ import os
 import subprocess
 import time
 from pathlib import Path
-from threading import Thread
 
 import pytest
 import requests
@@ -106,8 +105,9 @@ def pytest_configure(config):
 @pytest.fixture(scope="session")
 def mcp_test_config():
     """Configuration for MCP tests."""
+    base_url = os.getenv("BASE_URL", "http://localhost:8000")
     return {
-        "base_url": os.getenv("MCP_BASE_URL", "http://localhost:8000/mcp"),
+        "base_url": f"{base_url}/mcp",
         "timeout": int(os.getenv("MCP_TEST_TIMEOUT", "10")),
         "has_api_key": bool(
             os.getenv("SPLITWISE_API_KEY") or os.getenv("SPLITWISE_CONSUMER_KEY")
@@ -119,18 +119,19 @@ def mcp_test_config():
 def mcp_server_process():
     """Start MCP server for HTTP testing."""
     # Check if server is already running
-    base_url = os.getenv("MCP_BASE_URL", "http://localhost:8000/mcp")
+    base_url = os.getenv("BASE_URL", "http://localhost:8000")
+    mcp_endpoint = f"{base_url}/mcp"
 
     def is_server_running():
         try:
-            response = requests.get(base_url.replace("/mcp", "/"), timeout=2)
+            requests.get(base_url, timeout=2)
             return True
         except requests.exceptions.RequestException:
             return False
 
     if is_server_running():
-        print(f"MCP server already running at {base_url}")
-        yield base_url
+        print(f"MCP server already running at {mcp_endpoint}")
+        yield mcp_endpoint
         return
 
     # Start the MCP server with HTTP transport
@@ -148,7 +149,7 @@ def mcp_server_process():
 
         print("Starting MCP server for HTTP testing...")
         server_process = subprocess.Popen(
-            [".venv/bin/python", "-m", "app.mcp_server"],
+            [".venv/bin/python", "-m", "app.main"],
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -159,7 +160,7 @@ def mcp_server_process():
         max_attempts = 30
         for _attempt in range(max_attempts):
             if is_server_running():
-                print(f"MCP server started successfully at {base_url}")
+                print(f"MCP server started successfully at {mcp_endpoint}")
                 break
             time.sleep(1)
         else:
@@ -170,7 +171,7 @@ def mcp_server_process():
                 f"stdout: {stdout.decode()}, stderr: {stderr.decode()}"
             )
 
-        yield base_url
+        yield mcp_endpoint
 
     finally:
         # Clean up server process

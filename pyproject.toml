@@ -26,8 +26,6 @@ select = [
 
 ignore = [
     "E501",    # Line too long (handled by formatter)
-    "F401",    # Imported but unused (can be noisy during development)
-    "F841",    # Local variable assigned but never used
     "N805",    # First argument of a method should be named `self`
     "UP007",   # Use X | Y for type annotations (not compatible with older Python)
 ]

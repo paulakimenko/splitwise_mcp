@@ -137,15 +137,15 @@ make docker-compose-up
 
 # Run tests against dockerized service
 make test-mcp
-MCP_BASE_URL=http://localhost:8000/mcp make test-mcp-manual
+BASE_URL=http://localhost:8000 make test-mcp-manual
 ```
 
 ### Production/Staging
 
 ```bash
 # Test deployed service
-MCP_BASE_URL=https://your-domain.com/mcp make test-mcp-manual
-MCP_BASE_URL=https://your-domain.com/mcp python scripts/test_mcp_manual.py quick-test
+BASE_URL=https://your-domain.com make test-mcp-manual
+BASE_URL=https://your-domain.com python scripts/test_mcp_manual.py quick-test
 ```
 
 ## Available MCP Tools

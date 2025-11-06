@@ -21,7 +21,7 @@ class TestStreamableHTTPTransport:
         """Test that stdio transport is used by default."""
         with (
             patch.dict(os.environ, {}, clear=True),  # Clear environment
-            patch("app.mcp_server.mcp") as mock_mcp,
+            patch("app.main.mcp") as mock_mcp,
         ):
             # Mock the server run method
             mock_mcp.run = Mock()
@@ -42,7 +42,7 @@ class TestStreamableHTTPTransport:
                     "MCP_PORT": "9000",
                 },
             ),
-            patch("app.mcp_server.mcp") as mock_mcp,
+            patch("app.main.mcp") as mock_mcp,
         ):
             # Mock the server run method and settings
             mock_mcp.run = Mock()
@@ -67,7 +67,7 @@ class TestStreamableHTTPTransport:
                 },
                 clear=True,
             ),
-            patch("app.mcp_server.mcp") as mock_mcp,
+            patch("app.main.mcp") as mock_mcp,
         ):
             # Mock the server run method and settings
             mock_mcp.run = Mock()
@@ -88,7 +88,7 @@ class TestStreamableHTTPTransport:
                 os.environ,
                 {"MCP_TRANSPORT": "streamable-http", "MCP_PORT": "invalid_port"},
             ),
-            patch("app.mcp_server.mcp") as mock_mcp,
+            patch("app.main.mcp") as mock_mcp,
         ):
             # Mock the server run method
             mock_mcp.run = Mock()
@@ -109,7 +109,7 @@ class TestStreamableHTTPTransport:
         for env_value, expected_behavior in test_cases:
             with (
                 patch.dict(os.environ, {"MCP_TRANSPORT": env_value}),
-                patch("app.mcp_server.mcp") as mock_mcp,
+                patch("app.main.mcp") as mock_mcp,
             ):
                 # Mock the server run method and settings
                 mock_mcp.run = Mock()
@@ -132,7 +132,7 @@ class TestStreamableHTTPTransport:
         # Test stdio message
         with (
             patch.dict(os.environ, {}, clear=True),
-            patch("app.mcp_server.mcp") as mock_mcp,
+            patch("app.main.mcp") as mock_mcp,
         ):
             mock_mcp.run = Mock()
             run_mcp_server()
@@ -150,7 +150,7 @@ class TestStreamableHTTPTransport:
                     "MCP_PORT": "8080",
                 },
             ),
-            patch("app.mcp_server.mcp") as mock_mcp,
+            patch("app.main.mcp") as mock_mcp,
         ):
             mock_mcp.run = Mock()
             run_mcp_server()
@@ -171,7 +171,7 @@ class TestStreamableHTTPTransport:
 
         with (
             patch.dict(os.environ, docker_env),
-            patch("app.mcp_server.mcp") as mock_mcp,
+            patch("app.main.mcp") as mock_mcp,
         ):
             mock_mcp.run = Mock()
             mock_mcp.settings = Mock()

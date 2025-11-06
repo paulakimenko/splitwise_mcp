@@ -115,6 +115,36 @@ The `scripts/` directory contains utility scripts for testing and managing the s
 
 See [`scripts/README.md`](scripts/README.md) for detailed documentation.
 
+## Environment Configuration
+
+The service requires minimal environment configuration:
+
+**Required Variables:**
+- `SPLITWISE_API_KEY` - Your Splitwise personal API token (get from [splitwise.com](https://secure.splitwise.com/apps))
+
+**Optional Variables:**
+- `MONGO_URI` - MongoDB connection string (defaults to `mongodb://localhost:27017`)
+- `DB_NAME` - Database name (defaults to `splitwise`)
+- `MCP_TRANSPORT` - Transport mode: `stdio` (default) or `streamable-http` for remote operation
+- `MCP_HOST` - Host to bind to (defaults to `0.0.0.0` for HTTP transport)
+- `MCP_PORT` - Port for HTTP transport (defaults to `8000`)
+
+**MCP Endpoint Configuration:**
+- **Local Development** (stdio): No configuration needed, server runs on stdio transport
+- **Docker/Remote** (HTTP): Server automatically runs on HTTP transport at `/mcp` endpoint
+  - Default URL: `http://localhost:8000/mcp`
+  - The `/mcp` path is the MCP protocol endpoint, not a separate BASE_URL configuration
+  - Client connections go to the full URL including the `/mcp` path
+
+**MCP Protocol Notes:**
+- The MCP server requires protocol initialization before accepting other requests
+- Initialize with protocol version `2024-11-05` and client capabilities
+- See integration tests for initialization examples
+
+**Migration Note:** Previous versions used separate `MCP_BASE_URL` environment variable.  
+This has been consolidated into the server's HTTP configuration - clients connect directly  
+to `http://host:port/mcp` where the `/mcp` path is the MCP endpoint.
+
 ## Using the MCP Server
 
 This is a pure MCP SDK implementation that communicates via stdio with MCP-compatible clients:
