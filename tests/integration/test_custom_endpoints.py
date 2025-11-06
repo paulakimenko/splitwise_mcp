@@ -58,7 +58,8 @@ class TestCustomEndpointsIntegration:
         assert data["total"] == 0.0
         assert len(data["summary"]) == 0
 
-    def test_add_expense_equal_split_integration(
+    @pytest.mark.asyncio
+    async def test_add_expense_equal_split_integration(
         self,
         test_client: TestClient,
         test_group_name: str,
@@ -78,10 +79,8 @@ class TestCustomEndpointsIntegration:
             user.setEmail("mcp.test@example.com")
 
             # Add user to group using the raw client
-            asyncio.run(
-                asyncio.to_thread(
-                    splitwise_client.raw_client.addUserToGroup, user, test_group_id
-                )
+            await asyncio.to_thread(
+                splitwise_client.raw_client.addUserToGroup, user, test_group_id
             )
         except Exception:
             # If adding the user fails, skip this test

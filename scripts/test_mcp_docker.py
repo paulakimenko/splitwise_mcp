@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Test script to verify MCP server works in Docker."""
 
-import requests
 import sys
+
+import requests
 
 
 def test_mcp_server(base_url="http://localhost:8000"):
@@ -80,16 +81,13 @@ def test_mcp_server(base_url="http://localhost:8000"):
     except Exception as e:
         print(f"   ⚠️  Groups endpoint error: {e}")
 
-    print(f"\n🎉 MCP server test completed!")
+    print("\n🎉 MCP server test completed!")
     print(f"📍 Server is running at: {base_url}")
     print(f"📖 API docs available at: {base_url}/docs")
     return True
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        base_url = sys.argv[1]
-    else:
-        base_url = "http://localhost:8000"
+    base_url = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000"
 
     test_mcp_server(base_url)

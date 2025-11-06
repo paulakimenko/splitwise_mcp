@@ -8,6 +8,8 @@ error message.  Timestamps are added automatically.
 
 from __future__ import annotations
 
+import logging
+import sys
 from typing import Any
 
 from .db import insert_document
@@ -45,6 +47,8 @@ def log_operation(
             "error": error,
         }
         insert_document("logs", log_doc)
-    except Exception:
-        # Silently ignore logging failures to avoid breaking the main operation
-        pass
+    except Exception as logging_exc:
+        # Log the exception to stderr to avoid breaking the main operation
+        # but still capture the error for debugging
+        logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
+        logging.exception(f"Failed to log operation {endpoint} {method}: {logging_exc}")

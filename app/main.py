@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from contextlib import asynccontextmanager, suppress
 from typing import Any
+from unittest.mock import Mock
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import custom_methods
+from . import custom_methods, mcp_server
 from .db import find_latest, get_db, insert_document
 from .logging_utils import log_operation
 from .mcp_server import mcp
@@ -19,6 +21,14 @@ from .models import (
     GenericResponse,
 )
 from .splitwise_client import SplitwiseClient
+
+# Import splitwise SDK classes with error handling for optional dependency
+try:
+    from splitwise.expense import Expense, ExpenseUser  # type: ignore
+except ImportError:
+    # Handle case where splitwise SDK is not available
+    Expense = None  # type: ignore
+    ExpenseUser = None  # type: ignore
 
 
 @asynccontextmanager
@@ -63,16 +73,27 @@ with suppress(Exception):
 # Alternative MCP testing endpoint for development/testing
 @app.post("/mcp-test/call-tool")
 async def call_mcp_tool_test(
-    request: Request, tool_name: str, arguments: dict = None
+    request: Request, tool_name: str, arguments: dict[str, Any] | None = None
 ) -> Any:
-    """Test endpoint to call MCP tools directly (for testing purposes)."""
+    """Test endpoint to call MCP tools directly (for testing/development purposes only).
+
+    WARNING: This endpoint uses mock contexts and is intended for development and testing only.
+    In production, MCP tools should be called through the proper MCP protocol channels.
+    This endpoint may be disabled in production environments.
+    """
+    # Development guard - check for debug environment
+    if (
+        os.getenv("DEBUG", "").lower() not in ("1", "true", "yes")
+        and os.getenv("ENVIRONMENT", "").lower() == "production"
+    ):
+        raise HTTPException(
+            status_code=404, detail="MCP test endpoints are not available in production"
+        )
+
     if arguments is None:
         arguments = {}
 
     try:
-        # Import the MCP tools dynamically
-        from . import mcp_server
-
         # Get the tool function from the MCP server
         tool_functions = {
             "get_current_user": mcp_server.get_current_user,
@@ -93,13 +114,8 @@ async def call_mcp_tool_test(
 
         tool_func = tool_functions[tool_name]
 
-        # Create a mock context for the MCP tool
-        from unittest.mock import Mock
-
-        mock_context = Mock()
-        mock_context.request_context.lifespan_context = {
-            "client": request.app.state.client
-        }
+        # Create a mock context for the MCP tool using the factory function
+        mock_context = _create_mock_mcp_context(request.app.state.client)
 
         # Call the tool with appropriate arguments
         if tool_name == "get_group":
@@ -134,7 +150,19 @@ async def call_mcp_tool_test(
 
 @app.get("/mcp-test/list-tools")
 async def list_mcp_tools_test() -> Any:
-    """Test endpoint to list available MCP tools (for testing purposes)."""
+    """Test endpoint to list available MCP tools (for testing/development purposes only).
+
+    WARNING: This endpoint is intended for development and testing only.
+    It may be disabled in production environments.
+    """
+    # Development guard - check for debug environment
+    if (
+        os.getenv("DEBUG", "").lower() not in ("1", "true", "yes")
+        and os.getenv("ENVIRONMENT", "").lower() == "production"
+    ):
+        raise HTTPException(
+            status_code=404, detail="MCP test endpoints are not available in production"
+        )
     tools = [
         {
             "name": "get_current_user",
@@ -181,6 +209,17 @@ async def health_check() -> dict[str, Any]:
 def get_client(request: Request) -> SplitwiseClient:
     """Dependency to obtain a SplitwiseClient instance stored in app state."""
     return request.app.state.client
+
+
+def _create_mock_mcp_context(client: SplitwiseClient) -> Any:
+    """Create a mock MCP context for testing purposes.
+
+    WARNING: This is for development/testing only and should not be used in production.
+    In a real MCP environment, the context is provided by the MCP framework.
+    """
+    mock_context = Mock()
+    mock_context.request_context.lifespan_context = {"client": client}
+    return mock_context
 
 
 # REST endpoints for cached data
@@ -311,11 +350,10 @@ async def custom_add_expense_equal(
         me_id = client.get_current_user_id()
         if me_id is None:
             raise ValueError("Could not determine current user ID")
-        # Import classes from splitwise SDK lazily
-        from splitwise.expense import (
-            Expense,  # type: ignore
-            ExpenseUser,  # type: ignore
-        )
+
+        # Check if splitwise SDK classes are available
+        if Expense is None or ExpenseUser is None:
+            raise ValueError("Splitwise SDK is not available")
 
         expense = Expense()
         expense.setCost(str(payload.amount))
@@ -352,8 +390,6 @@ async def custom_add_expense_equal(
         )
     except Exception as db_exc:
         # Log database connection issues but continue operation
-        import logging
-
         logging.warning(
             f"Database operation failed for add_expense_equal_split: {db_exc}"
         )

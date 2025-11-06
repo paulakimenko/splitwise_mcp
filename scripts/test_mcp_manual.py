@@ -19,8 +19,13 @@ import httpx
 
 
 @asynccontextmanager
-async def mcp_http_session(base_url: str = "http://localhost:8000/mcp"):
-    """Create HTTP session for MCP testing."""
+async def mcp_http_session(base_url: str = "http://localhost:8000/mcp-test"):
+    """Create HTTP session for MCP testing.
+
+    Args:
+        base_url: Full base URL including the MCP endpoint prefix
+                 (default: http://localhost:8000/mcp-test)
+    """
     async with httpx.AsyncClient(timeout=30.0) as client:
         yield client, base_url
 
@@ -46,20 +51,29 @@ async def read_mcp_resource(client: httpx.AsyncClient, base_url: str, uri: str):
 
 
 async def list_tools(client: httpx.AsyncClient, base_url: str) -> dict[str, Any]:
-    """List available MCP tools."""
-    # Use the alternative REST endpoint
+    """List available MCP tools.
+
+    Args:
+        client: HTTP client for making requests
+        base_url: Full base URL including /mcp-test prefix (e.g., http://localhost:8000/mcp-test)
+    """
+    # Use the alternative REST endpoint - base_url already includes /mcp-test
     response = await client.get(f"{base_url}/list-tools")
     response.raise_for_status()
     return response.json()
 
 
 async def call_tool(
-    client: httpx.AsyncClient,
-    base_url: str,
-    tool_name: str,
-    arguments: dict[str, Any] | None = None,
+    client: httpx.AsyncClient, base_url: str, tool_name: str, arguments: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    """Call a specific MCP tool."""
+    """Call a specific MCP tool.
+
+    Args:
+        client: HTTP client for making requests
+        base_url: Full base URL including /mcp-test prefix (e.g., http://localhost:8000/mcp-test)
+        tool_name: Name of the tool to call
+        arguments: Optional arguments to pass to the tool
+    """
     # Use the alternative REST endpoint with query parameter format
     params = {"tool_name": tool_name}
     request_data = arguments or {}
@@ -139,7 +153,7 @@ async def main():
                     print("Status: 200")
                     print(json.dumps(response, indent=2))
                 except Exception as e:
-                    print(f"Status: 404")
+                    print("Status: 404")
                     print(json.dumps({"detail": str(e)}, indent=2))
 
             elif args.command == "read":

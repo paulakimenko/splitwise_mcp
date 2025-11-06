@@ -221,14 +221,14 @@ class TestMCPResources:
 
     @pytest.mark.asyncio
     async def test_group_resource_not_found(self, mock_context):
-        """Test group resource when group not found."""
+        """Test group resource when group is not found."""
         from app.mcp_server import get_group_by_name
 
         mock_client = mock_context.request_context.lifespan_context["client"]
         mock_client.get_group_by_name.return_value = None
 
-        result = await get_group_by_name("NonExistent", mock_context)
-        assert result == '{"error": "Group \'NonExistent\' not found"}'
+        with pytest.raises(ValueError, match="Group 'NonExistent' not found"):
+            await get_group_by_name("NonExistent", mock_context)
 
 
 class TestHelperFunction:

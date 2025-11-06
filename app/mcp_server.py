@@ -217,7 +217,8 @@ async def get_group_by_name(name: str, ctx: Context) -> str:
     decoded_name = unquote(name)
     group = client.get_group_by_name(decoded_name)
     if not group:
-        return json.dumps({"error": f"Group '{decoded_name}' not found"})
+        # Use MCP's built-in error handling by raising an exception
+        raise ValueError(f"Group '{decoded_name}' not found")
 
     converted = client.convert(group)
     return json.dumps(converted)
