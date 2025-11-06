@@ -54,6 +54,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Splitwise MCP Service", version="0.1.0", lifespan=lifespan)
 
+# Request logging middleware to debug invalid HTTP requests
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all HTTP requests for debugging invalid request warnings."""
+    try:
+        # Log basic request info
+        logging.info(f"Request: {request.method} {request.url.path} from {request.client}")
+        response = await call_next(request)
+        return response
+    except Exception as e:
+        logging.error(f"Request processing error: {e}")
+        raise
+
 # Allow all CORS origins for ease of testing; adjust as needed
 app.add_middleware(
     CORSMiddleware,
