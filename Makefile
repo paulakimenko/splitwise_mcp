@@ -148,7 +148,7 @@ test-full: check unit-test integration-test ## Run all checks, unit tests, and i
 
 ci: install-dev test-all ## Run full CI pipeline locally (unit tests only)
 
-ci-full: install-dev test-full test-mcp ## Run full CI pipeline with integration and MCP tests
+ci-full: install-dev fix test-full test-mcp ## Run full CI pipeline with integration and MCP tests and code fixes
 
 # Environment Commands
 env-setup: ## Copy .env.example to .env if it doesn't exist
