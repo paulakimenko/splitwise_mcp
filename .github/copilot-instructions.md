@@ -38,6 +38,39 @@ Use this reference when:
 - Debugging integration issues or data mapping
 - Adding new features that interact with Splitwise APIs
 
+## Use Cases & Examples
+
+**For comprehensive real-world usage scenarios and implementation patterns, see:**
+
+📋 **[Use Case Examples](docs-for-copilot/use-cases.md)**
+
+This document provides 42 detailed examples covering common Splitwise operations:
+
+**Basic Operations:**
+- Add expenses with equal splits or custom shares
+- Create groups and manage memberships
+- Track expenses and generate reports
+
+**Advanced Workflows:**
+- Multi-currency expense conversion
+- Batch expense operations
+- Debt settlement optimization
+- Category-based expense filtering
+
+**Reporting & Analytics:**
+- Monthly and quarterly expense reports
+- Cross-group spending analysis
+- Outstanding balance calculations
+- Trend analysis and recommendations
+
+**Data Management:**
+- Export expense data to CSV/tables
+- Search expenses by keywords or criteria
+- Bulk operations on multiple expenses
+- Archive and restore groups
+
+These examples demonstrate how to combine MCP tools, REST endpoints, and custom helpers to build complete expense management workflows. Each use case includes the specific API calls, data structures, and business logic patterns needed for implementation.
+
 ## Critical Patterns
 
 ### Method Mapping Pattern
