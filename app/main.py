@@ -90,7 +90,7 @@ async def mcp_ping() -> dict[str, str]:
     return {"status": "pong", "message": "Splitwise MCP server is operational"}
 
 
-@app.post("/mcp/list_groups")
+@app.get("/mcp/list_groups")
 async def mcp_list_groups(request: Request) -> dict[str, Any]:
     """List all groups via HTTP MCP endpoint for ChatGPT."""
     try:
@@ -187,7 +187,7 @@ async def get_ai_plugin_manifest() -> dict[str, Any]:
         "name_for_human": "Splitwise Expense Manager",
         "description_for_model": "Access and manage Splitwise expenses, groups, and friends. Split bills, track expenses, and manage group finances through the Splitwise API.",
         "description_for_human": "Manage your Splitwise expenses and split bills with friends and groups.",
-        "auth": {"type": "bearer", "authorization_type": "Bearer"},
+        "auth": {"type": "none"},
         "api": {
             "type": "openapi",
             "url": f"{os.getenv('BASE_URL', 'https://sw-mcp.paulakimenko.xyz')}/openapi.json",
