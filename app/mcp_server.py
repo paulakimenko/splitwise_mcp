@@ -104,7 +104,7 @@ async def _call_splitwise_tool(
                 "list_expenses": "expenses",
                 "list_friends": "friends",
                 "list_categories": "categories",
-                "list_currencies": "currencies"
+                "list_currencies": "currencies",
             }
             wrapper_key = response_wrappers.get(method_name, "result")
             return {wrapper_key: response_data}
@@ -142,6 +142,7 @@ async def group_resource(group_id: str, ctx: Context) -> str:
         client = ctx.request_context.lifespan_context["client"]
         # URL decode the name in case it contains special characters
         from urllib.parse import unquote
+
         decoded_name = unquote(group_id)
         group = client.get_group_by_name(decoded_name)
         if group is None:
@@ -151,9 +152,16 @@ async def group_resource(group_id: str, ctx: Context) -> str:
         # Try to persist to database and log operation, but don't fail if database is unavailable
         try:
             insert_document("get_group_by_name", {"response": response_data})
-            log_operation("get_group_by_name", "RESOURCE_READ", {"name": decoded_name}, response_data)
+            log_operation(
+                "get_group_by_name",
+                "RESOURCE_READ",
+                {"name": decoded_name},
+                response_data,
+            )
         except Exception as db_exc:
-            logging.warning(f"Database operation failed for get_group_by_name: {db_exc}")
+            logging.warning(
+                f"Database operation failed for get_group_by_name: {db_exc}"
+            )
 
         return json.dumps(response_data)
 
@@ -573,7 +581,9 @@ def run_mcp_server():
     port = int(os.environ.get("MCP_PORT", "8000"))
 
     if transport == "streamable-http":
-        print(f"Starting Splitwise MCP server with Streamable HTTP transport on {host}:{port}")
+        print(
+            f"Starting Splitwise MCP server with Streamable HTTP transport on {host}:{port}"
+        )
         mcp.run(transport="streamable-http", host=host, port=port)
     else:
         print("Starting Splitwise MCP server with stdio transport")

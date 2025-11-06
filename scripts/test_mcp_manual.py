@@ -19,28 +19,24 @@ import httpx
 
 
 @asynccontextmanager
-async def mcp_http_session(base_url: str = "http://localhost:8000/mcp-test"):
-    """Create HTTP session for MCP testing.
+async def mcp_http_session(base_url: str = "http://localhost:8000/mcp"):
+    """Create HTTP session for MCP testing via Streamable HTTP transport.
 
     Args:
-        base_url: Full base URL including the MCP endpoint prefix
-                 (default: http://localhost:8000/mcp-test)
+        base_url: MCP server URL with Streamable HTTP transport
+                 (default: http://localhost:8000/mcp)
     """
     async with httpx.AsyncClient(timeout=30.0) as client:
         yield client, base_url
 
 
-async def read_mcp_resource(client: httpx.AsyncClient, base_url: str, uri: str):
-    """Read an MCP resource over HTTP.
-
-    Note: This uses JSON-RPC protocol which may not work due to FastMCP
-    mounting limitations mentioned in the codebase.
-    """
+async def read_mcp_resource(client: httpx.AsyncClient, base_url: str, resource_uri: str):
+    """Read a specific MCP resource via Streamable HTTP transport."""
     request = {
         "jsonrpc": "2.0",
-        "id": 2,
+        "id": 5,
         "method": "resources/read",
-        "params": {"uri": uri},
+        "params": {"uri": resource_uri}
     }
 
     response = await client.post(
@@ -51,14 +47,22 @@ async def read_mcp_resource(client: httpx.AsyncClient, base_url: str, uri: str):
 
 
 async def list_tools(client: httpx.AsyncClient, base_url: str) -> dict[str, Any]:
-    """List available MCP tools.
+    """List available MCP tools via Streamable HTTP transport.
 
     Args:
         client: HTTP client for making requests
-        base_url: Full base URL including /mcp-test prefix (e.g., http://localhost:8000/mcp-test)
+        base_url: MCP server URL (e.g., http://localhost:8000/mcp)
     """
-    # Use the alternative REST endpoint - base_url already includes /mcp-test
-    response = await client.get(f"{base_url}/list-tools")
+    request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/list",
+        "params": {}
+    }
+
+    response = await client.post(
+        base_url, headers={"Content-Type": "application/json"}, json=request
+    )
     response.raise_for_status()
     return response.json()
 
@@ -66,29 +70,45 @@ async def list_tools(client: httpx.AsyncClient, base_url: str) -> dict[str, Any]
 async def call_tool(
     client: httpx.AsyncClient, base_url: str, tool_name: str, arguments: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    """Call a specific MCP tool.
+    """Call a specific MCP tool via Streamable HTTP transport.
 
     Args:
         client: HTTP client for making requests
-        base_url: Full base URL including /mcp-test prefix (e.g., http://localhost:8000/mcp-test)
+        base_url: MCP server URL (e.g., http://localhost:8000/mcp)
         tool_name: Name of the tool to call
         arguments: Optional arguments to pass to the tool
     """
-    # Use the alternative REST endpoint with query parameter format
-    params = {"tool_name": tool_name}
-    request_data = arguments or {}
+    request = {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+            "name": tool_name,
+            "arguments": arguments or {}
+        }
+    }
 
     response = await client.post(
-        f"{base_url}/call-tool", params=params, json=request_data
+        base_url, headers={"Content-Type": "application/json"}, json=request
     )
     response.raise_for_status()
     return response.json()
 
 
 async def list_mcp_resources(client: httpx.AsyncClient, base_url: str):
-    """List available MCP resources."""
-    # For now, return empty resources since we haven't implemented this endpoint yet
-    return 200, {"resources": []}
+    """List available MCP resources via Streamable HTTP transport."""
+    request = {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "resources/list",
+        "params": {}
+    }
+
+    response = await client.post(
+        base_url, headers={"Content-Type": "application/json"}, json=request
+    )
+
+    return response.status_code, response.json()
 
 
 async def main():
@@ -189,7 +209,6 @@ async def main():
 
                 # Test 3: List groups
                 print("\n3. Testing list_groups...")
-                # Note: Using REST endpoint due to FastMCP limitations with JSON-RPC protocol
                 try:
                     response = await call_tool(client, base_url, "list_groups", {})
                     print("   Status: 200")

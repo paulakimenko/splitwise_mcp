@@ -6,8 +6,6 @@ without any FastAPI dependencies.
 
 from unittest.mock import patch
 
-import pytest
-
 
 class TestPureMCPImplementation:
     """Test the pure MCP server implementation."""

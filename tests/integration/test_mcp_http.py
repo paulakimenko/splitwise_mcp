@@ -1,7 +1,7 @@
-"""HTTP-based MCP protocol tests.
+"""Streamable HTTP transport integration tests.
 
-These tests validate the MCP server over HTTP transport,
-useful for testing the actual deployed service.
+These tests validate the MCP server over Streamable HTTP transport,
+testing remote connectivity and MCP protocol compliance.
 """
 
 from __future__ import annotations
@@ -18,74 +18,42 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-class TestMCPServerIntegration:
-    """Test MCP server functionality through available endpoints."""
+class TestStreamableHTTPTransport:
+    """Test MCP server functionality via Streamable HTTP transport."""
 
     @pytest.fixture
-    def api_base_url(self) -> str:
-        """Base URL for the API server."""
-        return os.getenv("API_BASE_URL", "http://localhost:8000")
+    def mcp_base_url(self) -> str:
+        """Base URL for the MCP server using Streamable HTTP transport."""
+        return os.getenv("MCP_BASE_URL", "http://localhost:8000/mcp")
 
-    def _check_server_available(self, api_base_url: str) -> bool:
-        """Check if server is available and skip test if not."""
+    def _check_mcp_server_available(self, mcp_base_url: str) -> bool:
+        """Check if MCP server is available via Streamable HTTP transport."""
         try:
-            response = requests.get(f"{api_base_url}/health", timeout=2)
-            return response.status_code == 200
+            # Try to make a simple MCP initialize request
+            response = requests.post(
+                mcp_base_url,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "test-client", "version": "1.0.0"},
+                    },
+                },
+                headers={"Content-Type": "application/json"},
+                timeout=5,
+            )
+            return response.status_code in [200, 201]
         except requests.exceptions.ConnectionError:
             return False
 
-    def test_server_health(self, api_base_url: str):
-        """Test that the API server is accessible and has MCP functionality."""
-        if not self._check_server_available(api_base_url):
+    def test_mcp_initialize(self, mcp_base_url: str):
+        """Test MCP initialization over Streamable HTTP transport."""
+        if not self._check_mcp_server_available(mcp_base_url):
             pytest.skip(
-                "Server not available - tests require a running server on localhost:8000"
-            )
-
-        response = requests.get(f"{api_base_url}/health", timeout=2)
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "healthy"
-        assert "service" in data
-
-    def test_mcp_server_available_via_mount(self, api_base_url: str):
-        """Test that MCP server is available through mounting (may return 404 due to FastMCP limitations)."""
-        if not self._check_server_available(api_base_url):
-            pytest.skip(
-                "Server not available - tests require a running server on localhost:8000"
-            )
-
-        # Test the MCP endpoint - FastMCP mounting may not work properly with FastAPI
-        response = requests.get(f"{api_base_url}/mcp", timeout=2)
-        # Accept 404, 307, or other responses - the key is that we don't get 500 (internal server error)
-        assert response.status_code != 500
-
-        if response.status_code == 404:
-            pytest.skip(
-                "MCP HTTP transport not available via FastAPI mounting (known FastMCP limitation)"
-            )
-
-    def test_mcp_tools_functionality_via_api(self, api_base_url: str):
-        """Test MCP-like functionality through existing API endpoints (indirect test)."""
-        if not self._check_server_available(api_base_url):
-            pytest.skip(
-                "Server not available - tests require a running server on localhost:8000"
-            )
-
-        # Test that we can access cached data that would be populated by MCP tools
-        response = requests.get(f"{api_base_url}/groups", timeout=2)
-
-        # Should return successful response (may be empty if no cached data)
-        if response.status_code == 404:
-            pytest.skip("No cached groups data available - MCP tools not executed yet")
-        elif response.status_code == 200:
-            # Successfully got cached data that would come from MCP tools
-            assert isinstance(response.json(), (dict, list))
-
-    def test_mcp_session_initialization_fallback(self, api_base_url: str):
-        """Test MCP session initialization over HTTP (with graceful fallback)."""
-        if not self._check_server_available(api_base_url):
-            pytest.skip(
-                "Server not available - tests require a running server on localhost:8000"
+                "MCP server not available - tests require a running MCP server with Streamable HTTP transport"
             )
 
         initialize_request = {
@@ -99,56 +67,186 @@ class TestMCPServerIntegration:
             },
         }
 
-        mcp_headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-
         response = requests.post(
-            f"{api_base_url}/mcp",
-            headers=mcp_headers,
+            mcp_base_url,
             json=initialize_request,
+            headers={"Content-Type": "application/json"},
             timeout=5,
         )
 
-        # FastMCP mounting limitations - accept 404 as expected
-        if response.status_code == 404:
-            pytest.skip("MCP HTTP transport not properly mounted (FastMCP limitation)")
+        assert response.status_code in [200, 201]
+        data = response.json()
+        assert data["jsonrpc"] == "2.0"
+        assert data["id"] == 1
+        assert "result" in data
 
-        # If we get a response, it should be valid JSON-RPC
-        if response.status_code in [200, 201]:
-            response_data = response.json()
-            assert "jsonrpc" in response_data
-            assert response_data["id"] == 1
-
-    def test_mcp_functionality_demonstration(self, api_base_url: str):
-        """Demonstrate MCP functionality through documentation and health check."""
-        if not self._check_server_available(api_base_url):
+    def test_mcp_list_tools(self, mcp_base_url: str):
+        """Test listing MCP tools via Streamable HTTP transport."""
+        if not self._check_mcp_server_available(mcp_base_url):
             pytest.skip(
-                "Server not available - tests require a running server on localhost:8000"
+                "MCP server not available - tests require a running MCP server with Streamable HTTP transport"
             )
 
-        # This test demonstrates that MCP server exists and is configured
+        list_tools_request = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list",
+            "params": {},
+        }
 
-        # 1. Verify the server is running and configured
-        health_response = requests.get(f"{api_base_url}/health", timeout=2)
-        assert health_response.status_code == 200
-
-        # 2. Check that the server has MCP-related endpoints documented
-        openapi_response = requests.get(f"{api_base_url}/openapi.json", timeout=2)
-        assert openapi_response.status_code == 200
-
-        openapi_data = openapi_response.json()
-        paths = openapi_data.get("paths", {})
-
-        # The server should have endpoints that support MCP-style operations
-        # Even if MCP HTTP transport isn't working, the underlying functionality exists
-        assert len(paths) > 0
-
-        # Should have health endpoint and other operational endpoints
-        assert "/health" in paths
-
-        print(f"Server has {len(paths)} endpoints configured")
-        print(
-            "MCP server is operational but HTTP transport may have mounting limitations"
+        response = requests.post(
+            mcp_base_url,
+            json=list_tools_request,
+            headers={"Content-Type": "application/json"},
+            timeout=5,
         )
+
+        assert response.status_code in [200, 201]
+        data = response.json()
+        assert data["jsonrpc"] == "2.0"
+        assert data["id"] == 2
+        assert "result" in data
+        assert "tools" in data["result"]
+
+        # Should have MCP tools defined in the server
+        tools = data["result"]["tools"]
+        assert len(tools) > 0
+
+        # Check for some expected tools
+        tool_names = [tool["name"] for tool in tools]
+        assert "create_expense" in tool_names
+        assert "list_groups" in tool_names
+
+    def test_mcp_list_resources(self, mcp_base_url: str):
+        """Test listing MCP resources via Streamable HTTP transport."""
+        if not self._check_mcp_server_available(mcp_base_url):
+            pytest.skip(
+                "MCP server not available - tests require a running MCP server with Streamable HTTP transport"
+            )
+
+        list_resources_request = {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "resources/list",
+            "params": {},
+        }
+
+        response = requests.post(
+            mcp_base_url,
+            json=list_resources_request,
+            headers={"Content-Type": "application/json"},
+            timeout=5,
+        )
+
+        assert response.status_code in [200, 201]
+        data = response.json()
+        assert data["jsonrpc"] == "2.0"
+        assert data["id"] == 3
+        assert "result" in data
+        assert "resources" in data["result"]
+
+        # Should have MCP resources defined in the server
+        resources = data["result"]["resources"]
+        assert len(resources) > 0
+
+        # Check for some expected resources
+        resource_uris = [resource["uri"] for resource in resources]
+        assert "splitwise://current_user" in resource_uris
+        assert "splitwise://groups" in resource_uris
+
+    def test_mcp_call_tool(self, mcp_base_url: str):
+        """Test calling an MCP tool via Streamable HTTP transport."""
+        if not self._check_mcp_server_available(mcp_base_url):
+            pytest.skip(
+                "MCP server not available - tests require a running MCP server with Streamable HTTP transport"
+            )
+
+        # Test calling get_current_user tool
+        call_tool_request = {
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {"name": "get_current_user", "arguments": {}},
+        }
+
+        response = requests.post(
+            mcp_base_url,
+            json=call_tool_request,
+            headers={"Content-Type": "application/json"},
+            timeout=10,  # Longer timeout for API calls
+        )
+
+        assert response.status_code in [200, 201]
+        data = response.json()
+        assert data["jsonrpc"] == "2.0"
+        assert data["id"] == 4
+
+        # Tool call should succeed (may return error if API key invalid)
+        if "result" in data:
+            assert "content" in data["result"]
+        elif "error" in data:
+            # API error is acceptable for testing transport
+            assert "code" in data["error"]
+
+    def test_mcp_read_resource(self, mcp_base_url: str):
+        """Test reading an MCP resource via Streamable HTTP transport."""
+        if not self._check_mcp_server_available(mcp_base_url):
+            pytest.skip(
+                "MCP server not available - tests require a running MCP server with Streamable HTTP transport"
+            )
+
+        # Test reading current_user resource
+        read_resource_request = {
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "resources/read",
+            "params": {"uri": "splitwise://current_user"},
+        }
+
+        response = requests.post(
+            mcp_base_url,
+            json=read_resource_request,
+            headers={"Content-Type": "application/json"},
+            timeout=10,  # Longer timeout for API calls
+        )
+
+        assert response.status_code in [200, 201]
+        data = response.json()
+        assert data["jsonrpc"] == "2.0"
+        assert data["id"] == 5
+
+        # Resource read should succeed (may return error if API key invalid)
+        if "result" in data:
+            assert "contents" in data["result"]
+        elif "error" in data:
+            # API error is acceptable for testing transport
+            assert "code" in data["error"]
+
+    def test_mcp_protocol_compliance(self, mcp_base_url: str):
+        """Test that the server follows MCP protocol correctly."""
+        if not self._check_mcp_server_available(mcp_base_url):
+            pytest.skip(
+                "MCP server not available - tests require a running MCP server with Streamable HTTP transport"
+            )
+
+        # Test invalid method
+        invalid_request = {
+            "jsonrpc": "2.0",
+            "id": 6,
+            "method": "invalid/method",
+            "params": {},
+        }
+
+        response = requests.post(
+            mcp_base_url,
+            json=invalid_request,
+            headers={"Content-Type": "application/json"},
+            timeout=5,
+        )
+
+        assert response.status_code in [200, 201]
+        data = response.json()
+        assert data["jsonrpc"] == "2.0"
+        assert data["id"] == 6
+        assert "error" in data
+        assert data["error"]["code"] == -32601  # Method not found
