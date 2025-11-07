@@ -31,7 +31,7 @@ if not logger.handlers:
     )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
-    
+
 # Force flush to ensure logs appear immediately
 handler.flush = lambda: sys.stdout.flush()
 
@@ -185,15 +185,17 @@ def log_operation(
         if endpoint:
             summary_parts.append(f"endpoint={endpoint}")
         if masked_params:
-            param_summary = ", ".join(f"{k}={v}" for k, v in list(masked_params.items())[:3])
+            param_summary = ", ".join(
+                f"{k}={v}" for k, v in list(masked_params.items())[:3]
+            )
             if len(masked_params) > 3:
                 param_summary += "..."
             summary_parts.append(f"params=({param_summary})")
         if error:
             summary_parts.append(f"ERROR: {error}")
-        
+
         summary = " | ".join(summary_parts)
-        
+
         # Log with both human-readable summary and full JSON
         log_message = f"{summary} | {json.dumps(log_entry)}"
 
