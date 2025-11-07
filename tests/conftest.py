@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from app.cached_splitwise_client import CachedSplitwiseClient
 from app.splitwise_client import SplitwiseClient
 
 
@@ -45,6 +46,20 @@ def mock_splitwise_client(mock_splitwise_sdk):
     with patch("app.splitwise_client.Splitwise") as mock_splitwise_class:
         mock_splitwise_class.return_value = mock_splitwise_sdk
         client = SplitwiseClient(api_key="test_key")
+        return client
+
+
+@pytest.fixture
+def mock_cached_splitwise_client(mock_splitwise_sdk, mock_db):
+    """Mock CachedSplitwiseClient with mocked SDK and disabled cache."""
+    with (
+        patch("app.splitwise_client.Splitwise") as mock_splitwise_class,
+        patch("app.cached_splitwise_client.get_db") as mock_get_db,
+        patch.dict("os.environ", {"CACHE_ENABLED": "false"}),
+    ):
+        mock_splitwise_class.return_value = mock_splitwise_sdk
+        mock_get_db.return_value = mock_db
+        client = CachedSplitwiseClient(api_key="test_key")
         return client
 
 

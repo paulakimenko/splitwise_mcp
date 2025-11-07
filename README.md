@@ -19,6 +19,13 @@ management and financial reporting.
   operations via the [`splitwise` Python client](https://github.com/namaggarwal/splitwise).
   Each MCP operation stores data in MongoDB, logs the call, and responds with normalized JSON.
 
+* ✅ **Smart Caching Layer with Fallback** – intelligent MongoDB-based caching with entity-specific TTLs
+  reduces API calls and improves performance. GET operations check cache first (expenses: 5min,
+  groups: 60min, categories: 24h), while write operations auto-invalidate affected caches.
+  When the Splitwise API is unavailable, the system gracefully serves stale cached data for
+  read operations (write operations always fail to maintain data integrity). Cache can be 
+  disabled via environment variable for testing or real-time requirements.
+
 * ✅ **Database Persistence** – all operations are persisted in MongoDB
   collections named after the API method (e.g. `list_groups`, `create_expense`) with
   timestamps. A separate `logs` collection captures metadata for auditing.
@@ -39,9 +46,9 @@ management and financial reporting.
   Pre-built image available on Docker Hub (`paulakimenko/splitwise-mcp:latest`).
   Includes health checks and graceful database connection handling.
 
-* ✅ **Comprehensive Testing** – 76 unit tests with mocks plus integration tests
+* ✅ **Comprehensive Testing** – 105 unit tests with mocks plus integration tests
   validating MCP server functionality and Splitwise API integration. Tests include
-  MCP protocol validation and end-to-end workflows.
+  MCP protocol validation, caching layer verification, and end-to-end workflows.
 
 * ✅ **Modern Development Workflow** – Ruff for linting/formatting, comprehensive
   Makefile for all operations, GitHub Actions CI/CD, and proper MCP SDK patterns.
@@ -128,6 +135,14 @@ The service requires minimal environment configuration:
 - `MCP_TRANSPORT` - Transport mode: `stdio` (default) or `streamable-http` for remote operation
 - `MCP_HOST` - Host to bind to (defaults to `0.0.0.0` for HTTP transport)
 - `MCP_PORT` - Port for HTTP transport (defaults to `8000`)
+- `CACHE_ENABLED` - Enable/disable caching layer (defaults to `true`)
+- `CACHE_TTL_EXPENSES_MINUTES` - Cache TTL for expenses in minutes (defaults to `5`)
+- `CACHE_TTL_FRIENDS_MINUTES` - Cache TTL for friends in minutes (defaults to `5`)
+- `CACHE_TTL_USERS_MINUTES` - Cache TTL for users in minutes (defaults to `60`)
+- `CACHE_TTL_GROUPS_MINUTES` - Cache TTL for groups in minutes (defaults to `60`)
+- `CACHE_TTL_CATEGORIES_MINUTES` - Cache TTL for categories in minutes (defaults to `1440`)
+- `CACHE_TTL_CURRENCIES_MINUTES` - Cache TTL for currencies in minutes (defaults to `1440`)
+- `CACHE_TTL_NOTIFICATIONS_MINUTES` - Cache TTL for notifications in minutes (defaults to `0` - never cache)
 
 **MCP Endpoint Configuration:**
 - **Local Development** (stdio): No configuration needed, server runs on stdio transport
@@ -212,12 +227,26 @@ AI agents connect via stdio protocol. The server handles Splitwise authenticatio
 
 ### Database Integration
 
-All MCP operations automatically persist data to MongoDB:
+All MCP operations automatically persist data to MongoDB with intelligent caching:
 
 - **Collections**: Named after operations (`list_groups`, `create_expense`, etc.)
-- **Timestamps**: All documents include creation timestamps
+- **Timestamps**: All documents include creation timestamps for cache validation
 - **Audit Logging**: Separate `logs` collection tracks all operations
+- **Smart Caching**: Entity-specific TTLs reduce API calls:
+  - Expenses & Friends: 5 minutes (frequently changing data)
+  - Users & Groups: 60 minutes (moderately stable data)
+  - Categories & Currencies: 24 hours (static data)
+  - Notifications: Never cached (always fresh)
+- **Cache Invalidation**: Write operations automatically invalidate related caches
+  - Creating/updating/deleting expenses invalidates expense cache
+  - Group operations invalidate group and member caches
+  - Friend operations invalidate friend cache
+- **Cache Fallback**: When Splitwise API is unavailable, read operations gracefully
+  serve stale cached data (write operations always fail for data integrity)
+  - Fallback logged with operation type `CACHE_FALLBACK` for observability
+  - API errors logged with operation type `API_ERROR` when no cache available
 - **Graceful Degradation**: Server continues operation if database is unavailable
+- **Cache Control**: Set `CACHE_ENABLED=false` to disable caching entirely
 
 ### Example MCP Interactions
 
@@ -319,6 +348,11 @@ The service follows a pure MCP SDK architecture:
 │ • expenses       │ • delete_*    │ • financial    │
 │ • friends        │ • add_user    │ • debt_settle  │
 ├─────────────────────────────────────────────┤
+│       CachedSplitwiseClient (Wrapper)       │
+│    • Entity-specific TTL caching            │
+│    • Automatic cache invalidation           │
+│    • MongoDB-backed persistence             │
+├─────────────────────────────────────────────┤
 │            Splitwise SDK Client             │
 │         (Comprehensive Method Map)          │
 ├─────────────────────────────────────────────┤
@@ -333,6 +367,7 @@ The service follows a pure MCP SDK architecture:
 - **Resources**: GET operations via `splitwise://` URI scheme with caching
 - **Tools**: POST/PUT/DELETE operations with parameter validation  
 - **Prompts**: Complex workflows guiding AI agents through multi-step operations
+- **Caching Layer**: CachedSplitwiseClient wrapper with intelligent TTL management
 - **Database Persistence**: Automatic caching with timestamps and audit trails
 - **Splitwise Integration**: Complete API coverage with method mapping
 
@@ -411,9 +446,19 @@ make ci-full             # Full CI + integration tests
 
 The project includes comprehensive testing:
 
-- **Unit Tests** (76 tests): Fast, mock-based tests covering all modules including MCP server
+- **Unit Tests** (105 tests): Fast, mock-based tests covering all modules including MCP server and caching layer
 - **Integration Tests**: End-to-end tests against live Splitwise API and MCP server integration
 - **Test Coverage**: Detailed coverage reporting with pytest-cov
+
+**Test Breakdown:**
+- Cached Client: 37 tests (initialization, TTL validation, cache operations, invalidation)
+- Custom Methods: 10 tests (expense analysis, reporting workflows)
+- Database: 9 tests (MongoDB operations, connection handling)
+- MCP Server: 14 tests (pure MCP implementation, ChatGPT connector compatibility)
+- Models: 8 tests (Pydantic validation)
+- Splitwise Client: 18 tests (SDK wrapper, method mapping)
+- Transport: 7 tests (stdio/HTTP transport configuration)
+- Integration: 16 tests (live API, MCP protocol compliance)
 
 ```bash
 # Run unit tests (safe, no API calls)

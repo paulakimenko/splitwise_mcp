@@ -17,29 +17,29 @@ from urllib.parse import unquote
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import ToolAnnotations
 
+from . import constants as const
 from . import custom_methods
-from .db import insert_document
+from .cached_splitwise_client import CachedSplitwiseClient
 from .logging_utils import log_operation
-from .splitwise_client import SplitwiseClient
 
 
 @asynccontextmanager
-async def mcp_lifespan(server: FastMCP):
+async def mcp_lifespan(_server: FastMCP):
     """Manage MCP server startup and shutdown lifecycle."""
     # Initialize Splitwise client on startup
-    api_key = os.environ.get("SPLITWISE_API_KEY")
-    consumer_key = os.environ.get("SPLITWISE_CONSUMER_KEY")
-    consumer_secret = os.environ.get("SPLITWISE_CONSUMER_SECRET")
+    api_key = os.environ.get(const.ENV_SPLITWISE_API_KEY)
+    consumer_key = os.environ.get(const.ENV_SPLITWISE_CONSUMER_KEY)
+    consumer_secret = os.environ.get(const.ENV_SPLITWISE_CONSUMER_SECRET)
 
     if api_key:
-        client = SplitwiseClient(api_key=api_key)
+        client = CachedSplitwiseClient(api_key=api_key)
     elif consumer_key and consumer_secret:
-        client = SplitwiseClient(
+        client = CachedSplitwiseClient(
             consumer_key=consumer_key, consumer_secret=consumer_secret
         )
     else:
-        raise RuntimeError(
-            "You must set either SPLITWISE_API_KEY or both SPLITWISE_CONSUMER_KEY and SPLITWISE_CONSUMER_SECRET in the environment"
+        raise ValueError(
+            f"Either {const.ENV_SPLITWISE_API_KEY} or {const.ENV_SPLITWISE_CONSUMER_KEY}/{const.ENV_SPLITWISE_CONSUMER_SECRET} must be set"
         )
 
     try:
@@ -65,24 +65,25 @@ async def _call_splitwise_resource(
         )
         response_data = client.convert(result)
 
-        # Try to persist to database and log operation, but don't fail if database is unavailable
-        try:
-            insert_document(method_name, {"response": response_data})
-            log_operation(method_name, "RESOURCE_READ", kwargs, response_data)
-        except Exception as db_exc:
-            logging.warning(f"Database operation failed for {method_name}: {db_exc}")
-
         return json.dumps(response_data)
     except Exception as exc:
         with suppress(Exception):
-            log_operation(method_name, "RESOURCE_READ", kwargs, None, str(exc))
+            # Pass error in 5th parameter as per log_operation signature
+            log_operation(method_name, const.LOG_OP_API_ERROR, kwargs, None, str(exc))
         raise
 
 
 async def _call_splitwise_tool(
     ctx: Context, method_name: str, **kwargs: Any
 ) -> dict[str, Any]:
-    """Helper function for MCP tools - returns structured data."""
+    """Helper function for MCP tools - returns structured data.
+
+    For backward compatibility, list responses are wrapped with method-specific keys:
+    - list_groups -> {"groups": [...]}
+    - list_expenses -> {"expenses": [...]}
+    - list_friends -> {"friends": [...]}
+    - etc.
+    """
     client = ctx.request_context.lifespan_context["client"]
 
     try:
@@ -91,30 +92,26 @@ async def _call_splitwise_tool(
         )
         response_data = client.convert(result)
 
-        # Try to persist to database and log operation, but don't fail if database is unavailable
-        try:
-            insert_document(method_name, {"request": kwargs, "response": response_data})
-            log_operation(method_name, "TOOL_CALL", kwargs, response_data)
-        except Exception as db_exc:
-            logging.warning(f"Database operation failed for {method_name}: {db_exc}")
-
         # Ensure response is always a dictionary for MCP tool compatibility
         if not isinstance(response_data, dict):
-            # For list responses from specific methods, wrap in expected structure
-            response_wrappers = {
-                "list_groups": "groups",
-                "list_expenses": "expenses",
-                "list_friends": "friends",
-                "list_categories": "categories",
-                "list_currencies": "currencies",
-            }
-            wrapper_key = response_wrappers.get(method_name, "result")
-            return {wrapper_key: response_data}
+            # If response is a list, wrap it with method-specific semantic key
+            if isinstance(response_data, list):
+                # Extract semantic key from method name (e.g., "list_groups" -> "groups")
+                if method_name.startswith("list_"):
+                    semantic_key = method_name[5:]  # Remove "list_" prefix
+                    response_data = {semantic_key: response_data}
+                else:
+                    # Fallback to generic wrapper for other list methods
+                    response_data = {"items": response_data}
+            else:
+                # For other types (primitives), wrap in a dict
+                response_data = {"result": response_data}
 
         return response_data
     except Exception as exc:
         with suppress(Exception):
-            log_operation(method_name, "TOOL_CALL", kwargs, None, str(exc))
+            # Pass error in 5th parameter as per log_operation signature
+            log_operation(method_name, const.LOG_OP_API_ERROR, kwargs, None, str(exc))
         raise
 
 
@@ -124,13 +121,13 @@ async def _call_splitwise_tool(
 @mcp.resource("splitwise://current_user")
 async def current_user_resource(ctx: Context) -> str:
     """Get current authenticated user information as a resource."""
-    return await _call_splitwise_resource(ctx, "get_current_user")
+    return await _call_splitwise_resource(ctx, const.METHOD_GET_CURRENT_USER)
 
 
 @mcp.resource("splitwise://groups")
 async def groups_resource(ctx: Context) -> str:
     """List all groups for the current user as a resource."""
-    return await _call_splitwise_resource(ctx, "list_groups")
+    return await _call_splitwise_resource(ctx, const.METHOD_LIST_GROUPS)
 
 
 @mcp.resource("splitwise://group/{group_id}")
@@ -138,7 +135,9 @@ async def group_resource(group_id: str, ctx: Context) -> str:
     """Get details of a specific group by ID or name as a resource."""
     # Try to parse as integer (group ID) first
     try:
-        return await _call_splitwise_resource(ctx, "get_group", id=int(group_id))
+        return await _call_splitwise_resource(
+            ctx, const.METHOD_GET_GROUP, id=int(group_id)
+        )
     except ValueError:
         # If not an integer, treat as group name
         client = ctx.request_context.lifespan_context["client"]
@@ -149,69 +148,59 @@ async def group_resource(group_id: str, ctx: Context) -> str:
             raise ValueError(f"Group not found: {decoded_name}") from None
         response_data = client.convert(group)
 
-        # Try to persist to database and log operation, but don't fail if database is unavailable
-        try:
-            insert_document("get_group_by_name", {"response": response_data})
-            log_operation(
-                "get_group_by_name",
-                "RESOURCE_READ",
-                {"name": decoded_name},
-                response_data,
-            )
-        except Exception as db_exc:
-            logging.warning(
-                f"Database operation failed for get_group_by_name: {db_exc}"
-            )
-
         return json.dumps(response_data)
 
 
 @mcp.resource("splitwise://expenses")
 async def expenses_resource(ctx: Context) -> str:
     """List all expenses for the current user as a resource."""
-    return await _call_splitwise_resource(ctx, "list_expenses")
+    return await _call_splitwise_resource(ctx, const.METHOD_LIST_EXPENSES)
 
 
 @mcp.resource("splitwise://expense/{expense_id}")
 async def expense_resource(expense_id: str, ctx: Context) -> str:
     """Get details of a specific expense by ID as a resource."""
-    return await _call_splitwise_resource(ctx, "get_expense", id=int(expense_id))
+    return await _call_splitwise_resource(
+        ctx, const.METHOD_GET_EXPENSE, id=int(expense_id)
+    )
 
 
 @mcp.resource("splitwise://friends")
 async def friends_resource(ctx: Context) -> str:
     """List all friends for the current user as a resource."""
-    return await _call_splitwise_resource(ctx, "list_friends")
+    return await _call_splitwise_resource(ctx, const.METHOD_LIST_FRIENDS)
 
 
 @mcp.resource("splitwise://friend/{friend_id}")
 async def friend_resource(friend_id: str, ctx: Context) -> str:
     """Get details of a specific friend by ID as a resource."""
-    return await _call_splitwise_resource(ctx, "get_friend", id=int(friend_id))
+    return await _call_splitwise_resource(
+        ctx, const.METHOD_GET_FRIEND, id=int(friend_id)
+    )
 
 
 @mcp.resource("splitwise://categories")
 async def categories_resource(ctx: Context) -> str:
     """List all expense categories as a resource."""
-    return await _call_splitwise_resource(ctx, "list_categories")
+    return await _call_splitwise_resource(ctx, const.METHOD_LIST_CATEGORIES)
 
 
 @mcp.resource("splitwise://currencies")
 async def currencies_resource(ctx: Context) -> str:
     """List all supported currencies as a resource."""
-    return await _call_splitwise_resource(ctx, "list_currencies")
+    return await _call_splitwise_resource(ctx, const.METHOD_LIST_CURRENCIES)
 
 
 @mcp.resource("splitwise://exchange_rates")
 async def exchange_rates_resource(ctx: Context) -> str:
     """Get current exchange rates as a resource."""
-    return await _call_splitwise_resource(ctx, "get_exchange_rates")
+    return await _call_splitwise_resource(ctx, const.METHOD_GET_EXCHANGE_RATES)
 
 
 @mcp.resource("splitwise://notifications")
 async def notifications_resource(ctx: Context) -> str:
     """List notifications as a resource."""
-    return await _call_splitwise_resource(ctx, "list_notifications")
+    return await _call_splitwise_resource(ctx, const.METHOD_LIST_NOTIFICATIONS)
 
 
 # MCP Tools for ChatGPT Connector Compatibility (REQUIRED)
@@ -229,7 +218,9 @@ async def search(query: str, ctx: Context) -> dict[str, Any]:
 
     try:
         # Search in groups
-        groups_data = await asyncio.to_thread(client.call_mapped_method, "list_groups")
+        groups_data = await asyncio.to_thread(
+            client.call_mapped_method, const.METHOD_LIST_GROUPS
+        )
         groups = client.convert(groups_data)
         if isinstance(groups, list):
             for group in groups:
@@ -244,7 +235,7 @@ async def search(query: str, ctx: Context) -> dict[str, Any]:
 
         # Search in expenses
         expenses_data = await asyncio.to_thread(
-            client.call_mapped_method, "list_expenses", limit=100
+            client.call_mapped_method, const.METHOD_LIST_EXPENSES, limit=100
         )
         expenses = client.convert(expenses_data)
         if isinstance(expenses, list):
@@ -261,7 +252,7 @@ async def search(query: str, ctx: Context) -> dict[str, Any]:
 
         # Search in friends
         friends_data = await asyncio.to_thread(
-            client.call_mapped_method, "list_friends"
+            client.call_mapped_method, const.METHOD_LIST_FRIENDS
         )
         friends = client.convert(friends_data)
         if isinstance(friends, list):
@@ -279,23 +270,15 @@ async def search(query: str, ctx: Context) -> dict[str, Any]:
         # Limit to top 10 results
         results = results[:10]
 
-        # Log the operation
-        try:
-            insert_document(
-                "search",
-                {"request": {"query": query}, "response": {"results": results}},
-            )
-            log_operation("search", "TOOL_CALL", {"query": query}, {"results": results})
-        except Exception as db_exc:
-            logging.warning(f"Database operation failed for search: {db_exc}")
-
         # Return in the exact format ChatGPT expects
         return {"results": results}
 
     except Exception as exc:
         logging.error(f"Search failed: {exc}")
         with suppress(Exception):
-            log_operation("search", "TOOL_CALL", {"query": query}, None, str(exc))
+            log_operation(
+                "search", const.LOG_OP_API_ERROR, {"query": query}, {"error": str(exc)}
+            )
         raise
 
 
@@ -313,7 +296,7 @@ async def fetch(id: str, ctx: Context) -> dict[str, Any]:
         if id.startswith("group_"):
             actual_id = int(id.replace("group_", ""))
             data = await asyncio.to_thread(
-                client.call_mapped_method, "get_group", id=actual_id
+                client.call_mapped_method, const.METHOD_GET_GROUP, id=actual_id
             )
             result_data = client.convert(data)
 
@@ -331,7 +314,7 @@ async def fetch(id: str, ctx: Context) -> dict[str, Any]:
         elif id.startswith("expense_"):
             actual_id = int(id.replace("expense_", ""))
             data = await asyncio.to_thread(
-                client.call_mapped_method, "get_expense", id=actual_id
+                client.call_mapped_method, const.METHOD_GET_EXPENSE, id=actual_id
             )
             result_data = client.convert(data)
 
@@ -350,7 +333,7 @@ async def fetch(id: str, ctx: Context) -> dict[str, Any]:
         elif id.startswith("friend_"):
             actual_id = int(id.replace("friend_", ""))
             data = await asyncio.to_thread(
-                client.call_mapped_method, "get_friend", id=actual_id
+                client.call_mapped_method, const.METHOD_GET_FRIEND, id=actual_id
             )
             result_data = client.convert(data)
 
@@ -365,19 +348,14 @@ async def fetch(id: str, ctx: Context) -> dict[str, Any]:
         else:
             raise ValueError(f"Invalid ID format: {id}")
 
-        # Log the operation
-        try:
-            insert_document("fetch", {"request": {"id": id}, "response": result})
-            log_operation("fetch", "TOOL_CALL", {"id": id}, result)
-        except Exception as db_exc:
-            logging.warning(f"Database operation failed for fetch: {db_exc}")
-
         return result
 
     except Exception as exc:
         logging.error(f"Fetch failed for {id}: {exc}")
         with suppress(Exception):
-            log_operation("fetch", "TOOL_CALL", {"id": id}, None, str(exc))
+            log_operation(
+                "fetch", const.LOG_OP_API_ERROR, {"id": id}, {"error": str(exc)}
+            )
         raise
 
 
@@ -408,7 +386,7 @@ async def create_expense(
     if split_equally:
         params["split_equally"] = split_equally
 
-    return await _call_splitwise_tool(ctx, "create_expense", **params)
+    return await _call_splitwise_tool(ctx, const.METHOD_CREATE_EXPENSE, **params)
 
 
 @mcp.tool()
@@ -421,7 +399,7 @@ async def create_group(
         "group_type": group_type,
         **kwargs,
     }
-    return await _call_splitwise_tool(ctx, "create_group", **params)
+    return await _call_splitwise_tool(ctx, const.METHOD_CREATE_GROUP, **params)
 
 
 @mcp.tool()
@@ -429,13 +407,15 @@ async def update_expense(
     expense_id: int, ctx: Context, **kwargs: Any
 ) -> dict[str, Any]:
     """Update an existing expense."""
-    return await _call_splitwise_tool(ctx, "update_expense", id=expense_id, **kwargs)
+    return await _call_splitwise_tool(
+        ctx, const.METHOD_UPDATE_EXPENSE, id=expense_id, **kwargs
+    )
 
 
 @mcp.tool()
 async def delete_expense(expense_id: int, ctx: Context) -> dict[str, Any]:
     """Delete an expense."""
-    return await _call_splitwise_tool(ctx, "delete_expense", id=expense_id)
+    return await _call_splitwise_tool(ctx, const.METHOD_DELETE_EXPENSE, id=expense_id)
 
 
 @mcp.tool()
@@ -453,13 +433,13 @@ async def create_friend(
     if user_last_name:
         params["user_last_name"] = user_last_name
 
-    return await _call_splitwise_tool(ctx, "create_friend", **params)
+    return await _call_splitwise_tool(ctx, const.METHOD_CREATE_FRIEND, **params)
 
 
 @mcp.tool()
 async def delete_friend(friend_id: int, ctx: Context) -> dict[str, Any]:
     """Delete a friend relationship."""
-    return await _call_splitwise_tool(ctx, "delete_friend", id=friend_id)
+    return await _call_splitwise_tool(ctx, const.METHOD_DELETE_FRIEND, id=friend_id)
 
 
 @mcp.tool()
@@ -471,7 +451,7 @@ async def add_user_to_group(
     if user_id is not None:
         params["user_id"] = user_id
 
-    return await _call_splitwise_tool(ctx, "add_user_to_group", **params)
+    return await _call_splitwise_tool(ctx, const.METHOD_ADD_USER_TO_GROUP, **params)
 
 
 @mcp.tool()
@@ -480,7 +460,7 @@ async def remove_user_from_group(
 ) -> dict[str, Any]:
     """Remove a user from a group."""
     return await _call_splitwise_tool(
-        ctx, "remove_user_from_group", group_id=group_id, user_id=user_id
+        ctx, const.METHOD_REMOVE_USER_FROM_GROUP, group_id=group_id, user_id=user_id
     )
 
 
@@ -493,35 +473,14 @@ async def get_monthly_expenses(
     try:
         expenses = await custom_methods.expenses_by_month(client, group_name, month)
 
-        # Try to persist the operation, but don't fail if database is unavailable
-        try:
-            insert_document(
-                "monthly_expenses",
-                {
-                    "request": {"group_name": group_name, "month": month},
-                    "response": expenses,
-                },
-            )
-            log_operation(
-                "get_monthly_expenses",
-                "TOOL_CALL",
-                {"group_name": group_name, "month": month},
-                expenses,
-            )
-        except Exception as db_exc:
-            logging.warning(
-                f"Database operation failed for get_monthly_expenses: {db_exc}"
-            )
-
         return {"expenses": expenses, "count": len(expenses)}
     except Exception as exc:
         with suppress(Exception):
             log_operation(
                 "get_monthly_expenses",
-                "TOOL_CALL",
+                const.LOG_OP_API_ERROR,
                 {"group_name": group_name, "month": month},
-                None,
-                str(exc),
+                {"error": str(exc)},
             )
         raise
 
@@ -535,35 +494,14 @@ async def generate_monthly_report(
     try:
         report = await custom_methods.monthly_report(client, group_name, month)
 
-        # Try to persist the operation, but don't fail if database is unavailable
-        try:
-            insert_document(
-                "monthly_report",
-                {
-                    "request": {"group_name": group_name, "month": month},
-                    "response": report,
-                },
-            )
-            log_operation(
-                "generate_monthly_report",
-                "TOOL_CALL",
-                {"group_name": group_name, "month": month},
-                report,
-            )
-        except Exception as db_exc:
-            logging.warning(
-                f"Database operation failed for generate_monthly_report: {db_exc}"
-            )
-
         return report
     except Exception as exc:
         with suppress(Exception):
             log_operation(
                 "generate_monthly_report",
-                "TOOL_CALL",
+                const.LOG_OP_API_ERROR,
                 {"group_name": group_name, "month": month},
-                None,
-                str(exc),
+                {"error": str(exc)},
             )
         raise
 
@@ -574,19 +512,19 @@ async def generate_monthly_report(
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_current_user(ctx: Context) -> dict[str, Any]:
     """Get current authenticated user information."""
-    return await _call_splitwise_tool(ctx, "get_current_user")
+    return await _call_splitwise_tool(ctx, const.METHOD_GET_CURRENT_USER)
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_groups(ctx: Context) -> dict[str, Any]:
     """List all groups for the current user."""
-    return await _call_splitwise_tool(ctx, "list_groups")
+    return await _call_splitwise_tool(ctx, const.METHOD_LIST_GROUPS)
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_group(group_id: int, ctx: Context) -> dict[str, Any]:
     """Get information about a specific group."""
-    return await _call_splitwise_tool(ctx, "get_group", id=group_id)
+    return await _call_splitwise_tool(ctx, const.METHOD_GET_GROUP, id=group_id)
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -610,43 +548,43 @@ async def list_expenses(
     if dated_before is not None:
         params["dated_before"] = dated_before
 
-    return await _call_splitwise_tool(ctx, "list_expenses", **params)
+    return await _call_splitwise_tool(ctx, const.METHOD_LIST_EXPENSES, **params)
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_expense(expense_id: int, ctx: Context) -> dict[str, Any]:
     """Get information about a specific expense."""
-    return await _call_splitwise_tool(ctx, "get_expense", id=expense_id)
+    return await _call_splitwise_tool(ctx, const.METHOD_GET_EXPENSE, id=expense_id)
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_friends(ctx: Context) -> dict[str, Any]:
     """List all friends for the current user."""
-    return await _call_splitwise_tool(ctx, "list_friends")
+    return await _call_splitwise_tool(ctx, const.METHOD_LIST_FRIENDS)
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_friend(friend_id: int, ctx: Context) -> dict[str, Any]:
     """Get information about a specific friend."""
-    return await _call_splitwise_tool(ctx, "get_friend", id=friend_id)
+    return await _call_splitwise_tool(ctx, const.METHOD_GET_FRIEND, id=friend_id)
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_categories(ctx: Context) -> dict[str, Any]:
     """List all available expense categories."""
-    return await _call_splitwise_tool(ctx, "list_categories")
+    return await _call_splitwise_tool(ctx, const.METHOD_LIST_CATEGORIES)
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_currencies(ctx: Context) -> dict[str, Any]:
     """List all supported currencies."""
-    return await _call_splitwise_tool(ctx, "list_currencies")
+    return await _call_splitwise_tool(ctx, const.METHOD_LIST_CURRENCIES)
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_exchange_rates(ctx: Context) -> dict[str, Any]:
     """Get current exchange rates."""
-    return await _call_splitwise_tool(ctx, "get_exchange_rates")
+    return await _call_splitwise_tool(ctx, const.METHOD_GET_EXCHANGE_RATES)
 
 
 # Additional helper resources
@@ -669,7 +607,9 @@ async def group_by_name_resource(name: str, ctx: Context) -> str:
 @mcp.resource("splitwise://group/{group_id}/expenses")
 async def group_expenses_resource(group_id: str, ctx: Context) -> str:
     """Get all expenses for a specific group as a resource."""
-    return await _call_splitwise_resource(ctx, "list_expenses", group_id=int(group_id))
+    return await _call_splitwise_resource(
+        ctx, const.METHOD_LIST_EXPENSES, group_id=int(group_id)
+    )
 
 
 # MCP Prompts for common workflows

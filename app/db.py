@@ -14,6 +14,8 @@ from typing import Any
 
 from pymongo import MongoClient
 
+from . import constants as const
+
 _client: MongoClient | None = None
 
 
@@ -26,7 +28,7 @@ def get_client() -> MongoClient:
     """
     global _client
     if _client is None:
-        mongo_uri = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
+        mongo_uri = os.environ.get(const.ENV_MONGO_URI, const.DEFAULT_MONGO_URI)
         _client = MongoClient(mongo_uri)
     return _client
 
@@ -34,7 +36,7 @@ def get_client() -> MongoClient:
 def get_db() -> Any:
     """Return the configured database object."""
     client = get_client()
-    db_name = os.environ.get("DB_NAME", "splitwise")
+    db_name = os.environ.get(const.ENV_DB_NAME, const.DEFAULT_DB_NAME)
     return client[db_name]
 
 

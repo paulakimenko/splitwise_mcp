@@ -1,12 +1,12 @@
 """Custom helper endpoints built atop Splitwise and the local database.
 
-These functions encapsulate higher‑level behaviours described by the
+These functions encapsulate higher-level behaviours described by the
 user, such as splitting an expense evenly, filtering expenses by
 month, and generating simple reports.  Each helper function receives
 a `SplitwiseClient` instance and interacts with the database via
 functions from `app.db`.
 
-Many of these operations are read‑only and operate on cached data
+Many of these operations are read-only and operate on cached data
 stored in MongoDB.  When interacting with the Splitwise API
 directly (e.g. to create or update an expense) we call methods on
 the provided client.
@@ -31,7 +31,7 @@ async def expenses_by_month(
 ) -> list[dict[str, Any]]:
     """Return expenses from a group for the specified month (YYYY-MM).
 
-    This helper does not call the Splitwise API directly – it reads
+    This helper does not call the Splitwise API directly - it reads
     from the cached `list_expenses` collection.  It attempts to
     normalise dates using `dateutil.parser.parse`.  Expenses whose
     date falls within the month and whose group matches the given
