@@ -30,7 +30,7 @@ async def mcp_lifespan(_server: FastMCP):
     logger.info("=" * 60)
     logger.info("SPLITWISE MCP SERVER STARTING UP")
     logger.info("=" * 60)
-    
+
     # Initialize Splitwise client on startup
     api_key = os.environ.get(const.ENV_SPLITWISE_API_KEY)
     consumer_key = os.environ.get(const.ENV_SPLITWISE_CONSUMER_KEY)
@@ -53,7 +53,7 @@ async def mcp_lifespan(_server: FastMCP):
     logger.info("Splitwise client initialized successfully")
     logger.info("MCP server ready to accept requests")
     logger.info("=" * 60)
-    
+
     try:
         yield {"client": client}
     finally:
@@ -72,7 +72,7 @@ async def _call_splitwise_resource(
     """Helper function for MCP resources - returns string content."""
     logger = logging.getLogger("splitwise_mcp")
     logger.info(f"RESOURCE CALL: {method_name} with params: {kwargs}")
-    
+
     client = ctx.request_context.lifespan_context["client"]
 
     try:
@@ -80,8 +80,10 @@ async def _call_splitwise_resource(
             client.call_mapped_method, method_name, **kwargs
         )
         response_data = client.convert(result)
-        
-        logger.info(f"RESOURCE SUCCESS: {method_name} returned {type(response_data).__name__}")
+
+        logger.info(
+            f"RESOURCE SUCCESS: {method_name} returned {type(response_data).__name__}"
+        )
         return json.dumps(response_data)
     except Exception as exc:
         logger.error(f"RESOURCE ERROR: {method_name} failed: {exc}")
@@ -104,7 +106,7 @@ async def _call_splitwise_tool(
     """
     logger = logging.getLogger("splitwise_mcp")
     logger.info(f"TOOL CALL: {method_name} with params: {kwargs}")
-    
+
     client = ctx.request_context.lifespan_context["client"]
 
     try:
@@ -128,7 +130,9 @@ async def _call_splitwise_tool(
                 # For other types (primitives), wrap in a dict
                 response_data = {"result": response_data}
 
-        logger.info(f"TOOL SUCCESS: {method_name} returned {list(response_data.keys()) if isinstance(response_data, dict) else type(response_data).__name__}")
+        logger.info(
+            f"TOOL SUCCESS: {method_name} returned {list(response_data.keys()) if isinstance(response_data, dict) else type(response_data).__name__}"
+        )
         return response_data
     except Exception as exc:
         logger.error(f"TOOL ERROR: {method_name} failed: {exc}")
