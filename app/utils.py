@@ -7,10 +7,10 @@ from typing import Any
 
 
 def object_to_dict(obj: Any) -> Any:
-    """Recursively convert Splitwise objects into JSON‑serialisable dicts.
+    """Recursively convert Splitwise objects into JSON-serialisable dicts.
 
     Many objects returned by the `splitwise` library are custom classes
-    without a built‑in JSON representation.  This helper attempts to
+    without a built-in JSON representation.  This helper attempts to
     traverse such objects and convert them into dictionaries, lists,
     primitives or strings so they can be logged and stored.
 
@@ -51,7 +51,7 @@ def object_to_dict(obj: Any) -> Any:
 
 
 def month_range(month: str) -> tuple[datetime, datetime]:
-    """Given a month in YYYY‑MM format return the start and end datetimes.
+    """Given a month in YYYY-MM format return the start and end datetimes.
 
     The end datetime is the first moment of the following month.  If the
     provided month string is invalid this function raises a ValueError.

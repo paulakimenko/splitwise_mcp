@@ -28,7 +28,7 @@ class TestPureMCPImplementation:
         assert callable(run_mcp_server)
 
     @patch("app.main.run_mcp_server")
-    def test_main_calls_run_mcp_server(self, mock_run_server):
+    def test_main_calls_run_mcp_server(self, _mock_run_server):
         """Test that run_mcp_server can be called."""
         from app.main import run_mcp_server
 

@@ -10,15 +10,16 @@ method names.  See the README for details.
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, ClassVar
 
-from splitwise import Splitwise  # type: ignore
+from splitwise import Splitwise
 
+from . import constants as const
 from .utils import object_to_dict
 
 
 class SplitwiseClient:
-    """High‑level wrapper for the Splitwise API.
+    """High-level wrapper for the Splitwise API.
 
     The client supports both personal API key authentication and OAuth consumer credentials.
     It first attempts personal API key authentication if available, then falls back to
@@ -27,36 +28,36 @@ class SplitwiseClient:
 
     # Mapping from external MCP method names (snake_case) to
     # Splitwise SDK method names (camelCase).
-    METHOD_MAP: dict[str, str] = {
+    METHOD_MAP: ClassVar[dict[str, str]] = {
         # GET methods (read-only)
-        "get_current_user": "getCurrentUser",
-        "list_groups": "getGroups",
-        "get_group": "getGroup",
-        "list_expenses": "getExpenses",
-        "get_expense": "getExpense",
-        "list_friends": "getFriends",
-        "get_friend": "getFriend",
-        "list_categories": "getCategories",
-        "list_currencies": "getCurrencies",
-        "get_exchange_rates": "getExchangeRates",
-        "list_notifications": "getNotifications",
+        const.METHOD_GET_CURRENT_USER: "getCurrentUser",
+        const.METHOD_LIST_GROUPS: "getGroups",
+        const.METHOD_GET_GROUP: "getGroup",
+        const.METHOD_LIST_EXPENSES: "getExpenses",
+        const.METHOD_GET_EXPENSE: "getExpense",
+        const.METHOD_LIST_FRIENDS: "getFriends",
+        const.METHOD_GET_FRIEND: "getFriend",
+        const.METHOD_LIST_CATEGORIES: "getCategories",
+        const.METHOD_LIST_CURRENCIES: "getCurrencies",
+        const.METHOD_GET_EXCHANGE_RATES: "getExchangeRates",
+        const.METHOD_LIST_NOTIFICATIONS: "getNotifications",
         # POST methods (actions with side effects)
-        "create_expense": "createExpense",
-        "create_group": "createGroup",
-        "update_expense": "updateExpense",
-        "delete_expense": "deleteExpense",
-        "create_friend": "createFriend",
-        "delete_friend": "deleteFriend",
-        "add_user_to_group": "addUserToGroup",
-        "remove_user_from_group": "removeUserFromGroup",
-        "undelete_expense": "undeleteExpense",
-        "delete_group": "deleteGroup",
-        "undelete_group": "undeleteGroup",
-        "update_user": "updateUser",
-        "create_friends": "createFriends",
-        "create_comment": "createComment",
-        "delete_comment": "deleteComment",
-        "get_balance": "getCurrentUser",  # Not a direct method; see notes
+        const.METHOD_CREATE_EXPENSE: "createExpense",
+        const.METHOD_CREATE_GROUP: "createGroup",
+        const.METHOD_UPDATE_EXPENSE: "updateExpense",
+        const.METHOD_DELETE_EXPENSE: "deleteExpense",
+        const.METHOD_CREATE_FRIEND: "createFriend",
+        const.METHOD_DELETE_FRIEND: "deleteFriend",
+        const.METHOD_ADD_USER_TO_GROUP: "addUserToGroup",
+        const.METHOD_REMOVE_USER_FROM_GROUP: "removeUserFromGroup",
+        const.METHOD_UNDELETE_EXPENSE: "undeleteExpense",
+        const.METHOD_DELETE_GROUP: "deleteGroup",
+        const.METHOD_UNDELETE_GROUP: "undeleteGroup",
+        const.METHOD_UPDATE_USER: "updateUser",
+        const.METHOD_CREATE_FRIENDS: "createFriends",
+        const.METHOD_CREATE_COMMENT: "createComment",
+        const.METHOD_DELETE_COMMENT: "deleteComment",
+        const.METHOD_GET_BALANCE: "getCurrentUser",  # Not a direct method; see notes
     }
 
     def __init__(
@@ -66,9 +67,11 @@ class SplitwiseClient:
         consumer_secret: str | None = None,
     ) -> None:
         # Get credentials from parameters or environment
-        consumer_key = consumer_key or os.environ.get("SPLITWISE_CONSUMER_KEY")
-        consumer_secret = consumer_secret or os.environ.get("SPLITWISE_CONSUMER_SECRET")
-        api_key = api_key or os.environ.get("SPLITWISE_API_KEY")
+        consumer_key = consumer_key or os.environ.get(const.ENV_SPLITWISE_CONSUMER_KEY)
+        consumer_secret = consumer_secret or os.environ.get(
+            const.ENV_SPLITWISE_CONSUMER_SECRET
+        )
+        api_key = api_key or os.environ.get(const.ENV_SPLITWISE_API_KEY)
 
         if api_key:
             # Use personal API key (preferred method)
@@ -84,8 +87,8 @@ class SplitwiseClient:
             )
         else:
             raise ValueError(
-                "Either SPLITWISE_CONSUMER_KEY and SPLITWISE_CONSUMER_SECRET, "
-                "or SPLITWISE_API_KEY environment variables must be set"
+                f"Either {const.ENV_SPLITWISE_CONSUMER_KEY} and {const.ENV_SPLITWISE_CONSUMER_SECRET}, "
+                f"or {const.ENV_SPLITWISE_API_KEY} environment variables must be set"
             )
 
     @property

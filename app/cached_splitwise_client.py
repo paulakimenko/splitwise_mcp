@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, ClassVar
 
+from . import constants as const
 from .db import get_db
 from .logging_utils import log_operation
 from .splitwise_client import SplitwiseClient
@@ -30,28 +31,50 @@ class CachedSplitwiseClient:
     """
 
     # Entity-specific TTL configuration (in minutes)
-    ENTITY_TTL_MAP = {
-        "expenses": int(os.getenv("CACHE_TTL_EXPENSES_MINUTES", "5")),
-        "friends": int(os.getenv("CACHE_TTL_FRIENDS_MINUTES", "5")),
-        "users": int(os.getenv("CACHE_TTL_USERS_MINUTES", "60")),
-        "groups": int(os.getenv("CACHE_TTL_GROUPS_MINUTES", "60")),
-        "categories": int(os.getenv("CACHE_TTL_CATEGORIES_MINUTES", "1440")),
-        "currencies": int(os.getenv("CACHE_TTL_CURRENCIES_MINUTES", "1440")),
-        "notifications": 0,  # Never cache - always fetch fresh
+    ENTITY_TTL_MAP: ClassVar[dict[str, int]] = {
+        const.ENTITY_EXPENSES: int(
+            os.getenv(
+                const.ENV_CACHE_TTL_EXPENSES_MINUTES, str(const.DEFAULT_TTL_EXPENSES)
+            )
+        ),
+        const.ENTITY_FRIENDS: int(
+            os.getenv(
+                const.ENV_CACHE_TTL_FRIENDS_MINUTES, str(const.DEFAULT_TTL_FRIENDS)
+            )
+        ),
+        const.ENTITY_USERS: int(
+            os.getenv(const.ENV_CACHE_TTL_USERS_MINUTES, str(const.DEFAULT_TTL_USERS))
+        ),
+        const.ENTITY_GROUPS: int(
+            os.getenv(const.ENV_CACHE_TTL_GROUPS_MINUTES, str(const.DEFAULT_TTL_GROUPS))
+        ),
+        const.ENTITY_CATEGORIES: int(
+            os.getenv(
+                const.ENV_CACHE_TTL_CATEGORIES_MINUTES,
+                str(const.DEFAULT_TTL_CATEGORIES),
+            )
+        ),
+        const.ENTITY_CURRENCIES: int(
+            os.getenv(
+                const.ENV_CACHE_TTL_CURRENCIES_MINUTES,
+                str(const.DEFAULT_TTL_CURRENCIES),
+            )
+        ),
+        const.ENTITY_NOTIFICATIONS: const.DEFAULT_TTL_NOTIFICATIONS,  # Never cache - always fetch fresh
     }
 
     # Mapping of method names to entity types for cache lookup
-    METHOD_TO_ENTITY_MAP = {
-        "get_current_user": "users",
-        "list_groups": "groups",
-        "get_group": "groups",
-        "list_expenses": "expenses",
-        "get_expense": "expenses",
-        "list_friends": "friends",
-        "get_friend": "friends",
-        "list_categories": "categories",
-        "list_currencies": "currencies",
-        "list_notifications": "notifications",
+    METHOD_TO_ENTITY_MAP: ClassVar[dict[str, str]] = {
+        const.METHOD_GET_CURRENT_USER: const.ENTITY_USERS,
+        const.METHOD_LIST_GROUPS: const.ENTITY_GROUPS,
+        const.METHOD_GET_GROUP: const.ENTITY_GROUPS,
+        const.METHOD_LIST_EXPENSES: const.ENTITY_EXPENSES,
+        const.METHOD_GET_EXPENSE: const.ENTITY_EXPENSES,
+        const.METHOD_LIST_FRIENDS: const.ENTITY_FRIENDS,
+        const.METHOD_GET_FRIEND: const.ENTITY_FRIENDS,
+        const.METHOD_LIST_CATEGORIES: const.ENTITY_CATEGORIES,
+        const.METHOD_LIST_CURRENCIES: const.ENTITY_CURRENCIES,
+        const.METHOD_LIST_NOTIFICATIONS: const.ENTITY_NOTIFICATIONS,
     }
 
     def __init__(
@@ -66,7 +89,10 @@ class CachedSplitwiseClient:
             consumer_key=consumer_key,
             consumer_secret=consumer_secret,
         )
-        self._cache_enabled = os.getenv("CACHE_ENABLED", "true").lower() == "true"
+        self._cache_enabled = (
+            os.getenv(const.ENV_CACHE_ENABLED, const.DEFAULT_CACHE_ENABLED).lower()
+            == "true"
+        )
 
     @property
     def raw_client(self):
@@ -129,7 +155,7 @@ class CachedSplitwiseClient:
             return None
 
         # Notifications are never cached
-        if entity_type == "notifications":
+        if entity_type == const.ENTITY_NOTIFICATIONS:
             return None
 
         try:
@@ -301,7 +327,7 @@ class CachedSplitwiseClient:
             )
             raise
 
-    def _invalidate_cache_for_write(self, method_name: str, **kwargs: Any) -> None:
+    def _invalidate_cache_for_write(self, method_name: str, **_kwargs: Any) -> None:
         """Invalidate cache entries affected by write operations."""
         if not self._cache_enabled:
             return

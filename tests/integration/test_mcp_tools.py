@@ -377,7 +377,7 @@ class TestMCPToolsIntegration:
                     assert "id" in data
                     assert data["name"] == group_name
                 except Exception as e:
-                    pytest.skip(f"Resource access failed: {str(e)}")
+                    pytest.skip(f"Resource access failed: {e!s}")
             else:
                 pytest.skip("No groups available to test with")
 
