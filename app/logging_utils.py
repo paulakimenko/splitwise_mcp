@@ -15,20 +15,25 @@ import re
 import sys
 from typing import Any
 
-# Configure standard Python logger
-logger = logging.getLogger(__name__)
+# Configure standard Python logger using root logger for visibility
+# Using root logger ensures logs appear in all environments (local, Docker, remote)
+logger = logging.getLogger("splitwise_mcp")
 logger.setLevel(logging.INFO)
+logger.propagate = True  # Allow propagation to root logger
 
 # Add stdout handler if not already configured
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(logging.INFO)
     formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+        "[%(asctime)s] SPLITWISE - %(levelname)s - %(message)s",
+        datefmt="%m/%d/%y %H:%M:%S",
     )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+
+# Force flush to ensure logs appear immediately
+handler.flush = lambda: sys.stdout.flush()
 
 # PII field patterns to mask
 PII_FIELDS = {
@@ -175,11 +180,30 @@ def log_operation(
         else:
             log_entry["response_type"] = type(masked_response).__name__
 
+        # Create human-readable summary for visibility
+        summary_parts = [f"{method}"]
+        if endpoint:
+            summary_parts.append(f"endpoint={endpoint}")
+        if masked_params:
+            param_summary = ", ".join(
+                f"{k}={v}" for k, v in list(masked_params.items())[:3]
+            )
+            if len(masked_params) > 3:
+                param_summary += "..."
+            summary_parts.append(f"params=({param_summary})")
+        if error:
+            summary_parts.append(f"ERROR: {error}")
+
+        summary = " | ".join(summary_parts)
+
+        # Log with both human-readable summary and full JSON
+        log_message = f"{summary} | {json.dumps(log_entry)}"
+
         # Log based on error status
         if error:
-            logger.error(json.dumps(log_entry))
+            logger.error(log_message)
         else:
-            logger.info(json.dumps(log_entry))
+            logger.info(log_message)
 
     except Exception as logging_exc:
         # If logging fails, report to stderr without breaking the operation
