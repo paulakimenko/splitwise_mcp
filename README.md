@@ -28,7 +28,12 @@ management and financial reporting.
 
 * ✅ **Database Persistence** – all operations are persisted in MongoDB
   collections named after the API method (e.g. `list_groups`, `create_expense`) with
-  timestamps. A separate `logs` collection captures metadata for auditing.
+  timestamps for caching and audit trails.
+
+* ✅ **Privacy-Compliant Logging** – standard Python logging to stdout with automatic
+  PII masking. User names and emails are masked before logging ("john@example.com" → 
+  "j***@example.com", "John Doe" → "J*** D***"). Logs include structured JSON metadata
+  for observability while maintaining privacy compliance.
 
 * ✅ **MCP Resources for Read Operations** – GET operations are exposed as MCP resources
   using the `splitwise://` URI scheme. Resources support caching and provide structured
@@ -130,8 +135,8 @@ The service requires minimal environment configuration:
 - `SPLITWISE_API_KEY` - Your Splitwise personal API token (get from [splitwise.com](https://secure.splitwise.com/apps))
 
 **Optional Variables:**
-- `MONGO_URI` - MongoDB connection string (defaults to `mongodb://localhost:27017`)
-- `DB_NAME` - Database name (defaults to `splitwise`)
+- `MONGO_URI` - MongoDB connection string (defaults to `mongodb://localhost:27017`, **optional - only used for caching**)
+- `DB_NAME` - Database name (defaults to `splitwise`, **optional - only used for caching**)
 - `MCP_TRANSPORT` - Transport mode: `stdio` (default) or `streamable-http` for remote operation
 - `MCP_HOST` - Host to bind to (defaults to `0.0.0.0` for HTTP transport)
 - `MCP_PORT` - Port for HTTP transport (defaults to `8000`)
@@ -143,6 +148,16 @@ The service requires minimal environment configuration:
 - `CACHE_TTL_CATEGORIES_MINUTES` - Cache TTL for categories in minutes (defaults to `1440`)
 - `CACHE_TTL_CURRENCIES_MINUTES` - Cache TTL for currencies in minutes (defaults to `1440`)
 - `CACHE_TTL_NOTIFICATIONS_MINUTES` - Cache TTL for notifications in minutes (defaults to `0` - never cache)
+
+**Logging Configuration:**
+- **Output**: Standard Python logging to stdout (JSON-formatted structured logs)
+- **PII Masking**: Automatic masking of sensitive user data:
+  - Email addresses: `"john.doe@example.com"` → `"j***@example.com"` (domain preserved)
+  - Person names: `"John Doe"` → `"J*** D***"` (first letter shown)
+  - Applies to: first_name, last_name, email fields in all logged data
+- **Format**: `"%(asctime)s - %(name)s - %(levelname)s - %(message)s"`
+- **Level**: INFO (successful operations) or ERROR (failed operations)
+- **No MongoDB Dependency**: Logging works independently of database availability
 
 **MCP Endpoint Configuration:**
 - **Local Development** (stdio): No configuration needed, server runs on stdio transport
@@ -231,7 +246,11 @@ All MCP operations automatically persist data to MongoDB with intelligent cachin
 
 - **Collections**: Named after operations (`list_groups`, `create_expense`, etc.)
 - **Timestamps**: All documents include creation timestamps for cache validation
-- **Audit Logging**: Separate `logs` collection tracks all operations
+- **Privacy-Compliant Logging**: All operations logged to stdout with automatic PII masking:
+  - Emails masked: `"user@example.com"` → `"u***@example.com"`
+  - Names masked: `"Alice Smith"` → `"A*** S***"`
+  - Structured JSON logs for observability without exposing sensitive data
+  - No dependency on MongoDB (logs to stdout even if database is unavailable)
 - **Smart Caching**: Entity-specific TTLs reduce API calls:
   - Expenses & Friends: 5 minutes (frequently changing data)
   - Users & Groups: 60 minutes (moderately stable data)
@@ -368,7 +387,8 @@ The service follows a pure MCP SDK architecture:
 - **Tools**: POST/PUT/DELETE operations with parameter validation  
 - **Prompts**: Complex workflows guiding AI agents through multi-step operations
 - **Caching Layer**: CachedSplitwiseClient wrapper with intelligent TTL management
-- **Database Persistence**: Automatic caching with timestamps and audit trails
+- **Database Persistence**: Automatic caching with timestamps (MongoDB optional, only for caching)
+- **Privacy-Compliant Logging**: Standard Python logging to stdout with PII masking
 - **Splitwise Integration**: Complete API coverage with method mapping
 
 ## MCP Usage Examples
