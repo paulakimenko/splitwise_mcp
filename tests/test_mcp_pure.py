@@ -242,7 +242,6 @@ class TestChatGPTConnectorTools:
 
         with (
             patch("app.main.asyncio.to_thread") as mock_to_thread,
-            patch("app.main.insert_document"),
             patch("app.main.log_operation"),
         ):
             # Configure mock to return data when called
@@ -282,7 +281,6 @@ class TestChatGPTConnectorTools:
 
         with (
             patch("app.main.asyncio.to_thread") as mock_to_thread,
-            patch("app.main.insert_document"),
             patch("app.main.log_operation"),
         ):
             mock_to_thread.return_value = mock_group_data
@@ -338,7 +336,6 @@ class TestChatGPTConnectorTools:
 
             with (
                 patch("app.main.asyncio.to_thread") as mock_to_thread,
-                patch("app.main.insert_document"),
                 patch("app.main.log_operation"),
             ):
                 mock_to_thread.return_value = mock_data

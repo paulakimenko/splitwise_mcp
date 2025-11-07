@@ -18,9 +18,8 @@ from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import ToolAnnotations
 
 from . import custom_methods
-from .db import insert_document
+from .cached_splitwise_client import CachedSplitwiseClient
 from .logging_utils import log_operation
-from .splitwise_client import SplitwiseClient
 
 
 @asynccontextmanager
@@ -32,14 +31,14 @@ async def mcp_lifespan(server: FastMCP):
     consumer_secret = os.environ.get("SPLITWISE_CONSUMER_SECRET")
 
     if api_key:
-        client = SplitwiseClient(api_key=api_key)
+        client = CachedSplitwiseClient(api_key=api_key)
     elif consumer_key and consumer_secret:
-        client = SplitwiseClient(
+        client = CachedSplitwiseClient(
             consumer_key=consumer_key, consumer_secret=consumer_secret
         )
     else:
-        raise RuntimeError(
-            "You must set either SPLITWISE_API_KEY or both SPLITWISE_CONSUMER_KEY and SPLITWISE_CONSUMER_SECRET in the environment"
+        raise ValueError(
+            "Either SPLITWISE_API_KEY or SPLITWISE_CONSUMER_KEY/SECRET must be set"
         )
 
     try:
@@ -65,17 +64,10 @@ async def _call_splitwise_resource(
         )
         response_data = client.convert(result)
 
-        # Try to persist to database and log operation, but don't fail if database is unavailable
-        try:
-            insert_document(method_name, {"response": response_data})
-            log_operation(method_name, "RESOURCE_READ", kwargs, response_data)
-        except Exception as db_exc:
-            logging.warning(f"Database operation failed for {method_name}: {db_exc}")
-
         return json.dumps(response_data)
     except Exception as exc:
         with suppress(Exception):
-            log_operation(method_name, "RESOURCE_READ", kwargs, None, str(exc))
+            log_operation(method_name, "ERROR", kwargs, {"error": str(exc)})
         raise
 
 
@@ -91,30 +83,19 @@ async def _call_splitwise_tool(
         )
         response_data = client.convert(result)
 
-        # Try to persist to database and log operation, but don't fail if database is unavailable
-        try:
-            insert_document(method_name, {"request": kwargs, "response": response_data})
-            log_operation(method_name, "TOOL_CALL", kwargs, response_data)
-        except Exception as db_exc:
-            logging.warning(f"Database operation failed for {method_name}: {db_exc}")
-
         # Ensure response is always a dictionary for MCP tool compatibility
         if not isinstance(response_data, dict):
-            # For list responses from specific methods, wrap in expected structure
-            response_wrappers = {
-                "list_groups": "groups",
-                "list_expenses": "expenses",
-                "list_friends": "friends",
-                "list_categories": "categories",
-                "list_currencies": "currencies",
-            }
-            wrapper_key = response_wrappers.get(method_name, "result")
-            return {wrapper_key: response_data}
+            # If response is a list, wrap it in a dict
+            if isinstance(response_data, list):
+                response_data = {"items": response_data}
+            else:
+                # For other types (primitives), wrap in a dict
+                response_data = {"result": response_data}
 
         return response_data
     except Exception as exc:
         with suppress(Exception):
-            log_operation(method_name, "TOOL_CALL", kwargs, None, str(exc))
+            log_operation(method_name, "ERROR", kwargs, {"error": str(exc)})
         raise
 
 
@@ -148,20 +129,6 @@ async def group_resource(group_id: str, ctx: Context) -> str:
         if group is None:
             raise ValueError(f"Group not found: {decoded_name}") from None
         response_data = client.convert(group)
-
-        # Try to persist to database and log operation, but don't fail if database is unavailable
-        try:
-            insert_document("get_group_by_name", {"response": response_data})
-            log_operation(
-                "get_group_by_name",
-                "RESOURCE_READ",
-                {"name": decoded_name},
-                response_data,
-            )
-        except Exception as db_exc:
-            logging.warning(
-                f"Database operation failed for get_group_by_name: {db_exc}"
-            )
 
         return json.dumps(response_data)
 
@@ -279,23 +246,13 @@ async def search(query: str, ctx: Context) -> dict[str, Any]:
         # Limit to top 10 results
         results = results[:10]
 
-        # Log the operation
-        try:
-            insert_document(
-                "search",
-                {"request": {"query": query}, "response": {"results": results}},
-            )
-            log_operation("search", "TOOL_CALL", {"query": query}, {"results": results})
-        except Exception as db_exc:
-            logging.warning(f"Database operation failed for search: {db_exc}")
-
         # Return in the exact format ChatGPT expects
         return {"results": results}
 
     except Exception as exc:
         logging.error(f"Search failed: {exc}")
         with suppress(Exception):
-            log_operation("search", "TOOL_CALL", {"query": query}, None, str(exc))
+            log_operation("search", "ERROR", {"query": query}, {"error": str(exc)})
         raise
 
 
@@ -365,19 +322,12 @@ async def fetch(id: str, ctx: Context) -> dict[str, Any]:
         else:
             raise ValueError(f"Invalid ID format: {id}")
 
-        # Log the operation
-        try:
-            insert_document("fetch", {"request": {"id": id}, "response": result})
-            log_operation("fetch", "TOOL_CALL", {"id": id}, result)
-        except Exception as db_exc:
-            logging.warning(f"Database operation failed for fetch: {db_exc}")
-
         return result
 
     except Exception as exc:
         logging.error(f"Fetch failed for {id}: {exc}")
         with suppress(Exception):
-            log_operation("fetch", "TOOL_CALL", {"id": id}, None, str(exc))
+            log_operation("fetch", "ERROR", {"id": id}, {"error": str(exc)})
         raise
 
 
@@ -493,35 +443,14 @@ async def get_monthly_expenses(
     try:
         expenses = await custom_methods.expenses_by_month(client, group_name, month)
 
-        # Try to persist the operation, but don't fail if database is unavailable
-        try:
-            insert_document(
-                "monthly_expenses",
-                {
-                    "request": {"group_name": group_name, "month": month},
-                    "response": expenses,
-                },
-            )
-            log_operation(
-                "get_monthly_expenses",
-                "TOOL_CALL",
-                {"group_name": group_name, "month": month},
-                expenses,
-            )
-        except Exception as db_exc:
-            logging.warning(
-                f"Database operation failed for get_monthly_expenses: {db_exc}"
-            )
-
         return {"expenses": expenses, "count": len(expenses)}
     except Exception as exc:
         with suppress(Exception):
             log_operation(
                 "get_monthly_expenses",
-                "TOOL_CALL",
+                "ERROR",
                 {"group_name": group_name, "month": month},
-                None,
-                str(exc),
+                {"error": str(exc)},
             )
         raise
 
@@ -535,35 +464,14 @@ async def generate_monthly_report(
     try:
         report = await custom_methods.monthly_report(client, group_name, month)
 
-        # Try to persist the operation, but don't fail if database is unavailable
-        try:
-            insert_document(
-                "monthly_report",
-                {
-                    "request": {"group_name": group_name, "month": month},
-                    "response": report,
-                },
-            )
-            log_operation(
-                "generate_monthly_report",
-                "TOOL_CALL",
-                {"group_name": group_name, "month": month},
-                report,
-            )
-        except Exception as db_exc:
-            logging.warning(
-                f"Database operation failed for generate_monthly_report: {db_exc}"
-            )
-
         return report
     except Exception as exc:
         with suppress(Exception):
             log_operation(
                 "generate_monthly_report",
-                "TOOL_CALL",
+                "ERROR",
                 {"group_name": group_name, "month": month},
-                None,
-                str(exc),
+                {"error": str(exc)},
             )
         raise
 
