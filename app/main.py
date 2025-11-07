@@ -26,25 +26,38 @@ from .logging_utils import log_operation
 @asynccontextmanager
 async def mcp_lifespan(_server: FastMCP):
     """Manage MCP server startup and shutdown lifecycle."""
+    logger = logging.getLogger("splitwise_mcp")
+    logger.info("=" * 60)
+    logger.info("SPLITWISE MCP SERVER STARTING UP")
+    logger.info("=" * 60)
+
     # Initialize Splitwise client on startup
     api_key = os.environ.get(const.ENV_SPLITWISE_API_KEY)
     consumer_key = os.environ.get(const.ENV_SPLITWISE_CONSUMER_KEY)
     consumer_secret = os.environ.get(const.ENV_SPLITWISE_CONSUMER_SECRET)
 
     if api_key:
+        logger.info("Initializing with API key authentication")
         client = CachedSplitwiseClient(api_key=api_key)
     elif consumer_key and consumer_secret:
+        logger.info("Initializing with OAuth consumer credentials")
         client = CachedSplitwiseClient(
             consumer_key=consumer_key, consumer_secret=consumer_secret
         )
     else:
+        logger.error("No Splitwise credentials found in environment")
         raise ValueError(
             f"Either {const.ENV_SPLITWISE_API_KEY} or {const.ENV_SPLITWISE_CONSUMER_KEY}/{const.ENV_SPLITWISE_CONSUMER_SECRET} must be set"
         )
 
+    logger.info("Splitwise client initialized successfully")
+    logger.info("MCP server ready to accept requests")
+    logger.info("=" * 60)
+
     try:
         yield {"client": client}
     finally:
+        logger.info("MCP server shutting down")
         # Cleanup if needed
         pass
 
@@ -57,6 +70,9 @@ async def _call_splitwise_resource(
     ctx: Context, method_name: str, **kwargs: Any
 ) -> str:
     """Helper function for MCP resources - returns string content."""
+    logger = logging.getLogger("splitwise_mcp")
+    logger.info(f"RESOURCE CALL: {method_name} with params: {kwargs}")
+
     client = ctx.request_context.lifespan_context["client"]
 
     try:
@@ -65,8 +81,12 @@ async def _call_splitwise_resource(
         )
         response_data = client.convert(result)
 
+        logger.info(
+            f"RESOURCE SUCCESS: {method_name} returned {type(response_data).__name__}"
+        )
         return json.dumps(response_data)
     except Exception as exc:
+        logger.error(f"RESOURCE ERROR: {method_name} failed: {exc}")
         with suppress(Exception):
             # Pass error in 5th parameter as per log_operation signature
             log_operation(method_name, const.LOG_OP_API_ERROR, kwargs, None, str(exc))
@@ -84,6 +104,9 @@ async def _call_splitwise_tool(
     - list_friends -> {"friends": [...]}
     - etc.
     """
+    logger = logging.getLogger("splitwise_mcp")
+    logger.info(f"TOOL CALL: {method_name} with params: {kwargs}")
+
     client = ctx.request_context.lifespan_context["client"]
 
     try:
@@ -107,8 +130,12 @@ async def _call_splitwise_tool(
                 # For other types (primitives), wrap in a dict
                 response_data = {"result": response_data}
 
+        logger.info(
+            f"TOOL SUCCESS: {method_name} returned {list(response_data.keys()) if isinstance(response_data, dict) else type(response_data).__name__}"
+        )
         return response_data
     except Exception as exc:
+        logger.error(f"TOOL ERROR: {method_name} failed: {exc}")
         with suppress(Exception):
             # Pass error in 5th parameter as per log_operation signature
             log_operation(method_name, const.LOG_OP_API_ERROR, kwargs, None, str(exc))
