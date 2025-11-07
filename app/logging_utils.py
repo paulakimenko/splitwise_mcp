@@ -1,18 +1,126 @@
-"""Simple logging utilities for request/response auditing.
+"""Logging utilities with PII masking for privacy compliance.
 
-Each operation against the Splitwise API or internal logic should be
-logged into a dedicated `logs` collection.  The log document
-captures the endpoint, HTTP method, parameters, outcome and any
-error message.  Timestamps are added automatically.
+This module provides structured logging using Python's standard logging
+library with automatic masking of Personally Identifiable Information (PII)
+such as user names and email addresses.
+
+MongoDB logging is deprecated in favor of standard stdout/stderr logging.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 import sys
 from typing import Any
 
-from .db import insert_document
+# Configure standard Python logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Add stdout handler if not already configured
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
+# PII field patterns to mask
+PII_FIELDS = {
+    "first_name",
+    "last_name",
+    "email",
+    "user_email",
+    "user_first_name",
+    "user_last_name",
+}
+
+# Email regex pattern for additional email detection
+EMAIL_PATTERN = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
+
+
+def mask_email(email: str) -> str:
+    """Mask an email address, preserving domain for debugging.
+
+    Example: john.doe@example.com -> j***@example.com
+    """
+    if not email or "@" not in email:
+        return email
+
+    local, domain = email.split("@", 1)
+    masked_local = "*" if len(local) <= 1 else local[0] + "***"
+
+    return f"{masked_local}@{domain}"
+
+
+def mask_name(name: str) -> str:
+    """Mask a person's name.
+
+    Example: John Doe -> J*** D***
+    """
+    if not name or len(name) <= 1:
+        return "***"
+
+    # If it's a multi-word name, mask each part
+    if " " in name:
+        parts = name.split()
+        return " ".join(part[0] + "***" if len(part) > 1 else "***" for part in parts)
+
+    return name[0] + "***"
+
+
+def mask_pii_in_string(text: str) -> str:
+    """Mask email addresses found in strings."""
+    return EMAIL_PATTERN.sub(lambda m: mask_email(m.group(0)), text)
+
+
+def mask_pii(data: Any) -> Any:
+    """Recursively mask PII fields in data structures.
+
+    Masks first_name, last_name, and email fields in dictionaries,
+    and processes nested structures (lists, dicts).
+
+    Parameters
+    ----------
+    data : Any
+        The data structure to mask (dict, list, or primitive)
+
+    Returns
+    -------
+    Any
+        A copy of the data with PII fields masked
+    """
+    if isinstance(data, dict):
+        masked = {}
+        for key, value in data.items():
+            # Check if this is a PII field
+            if key in PII_FIELDS:
+                if key == "email" or key.endswith("_email"):
+                    masked[key] = mask_email(str(value)) if value else value
+                elif "name" in key:
+                    masked[key] = mask_name(str(value)) if value else value
+                else:
+                    masked[key] = "***"
+            else:
+                # Recursively mask nested structures
+                masked[key] = mask_pii(value)
+        return masked
+
+    elif isinstance(data, list):
+        return [mask_pii(item) for item in data]
+
+    elif isinstance(data, str):
+        # Mask any email addresses found in strings
+        return mask_pii_in_string(data)
+
+    else:
+        # Return primitives as-is
+        return data
 
 
 def log_operation(
@@ -22,33 +130,57 @@ def log_operation(
     response: Any,
     error: str | None = None,
 ) -> None:
-    """Insert a log entry describing an operation.
+    """Log an operation with PII masking to standard output.
+
+    This function replaces the previous MongoDB-based logging with
+    standard Python logging to stdout. All PII fields (names, emails)
+    are automatically masked for privacy compliance.
 
     Parameters
     ----------
-    endpoint: str
-        The path or logical name of the invoked endpoint (e.g. `/mcp/list_groups`).
-    method: str
-        The HTTP method used (e.g. "GET", "POST").
-    params: dict | None
-        The request body or query parameters sent.  None if no parameters.
-    response: Any
-        The response data returned to the caller.  Can be JSON serialisable
-        or an error description.
-    error: str | None
+    endpoint : str
+        The path or logical name of the invoked endpoint (e.g. 'list_groups').
+    method : str
+        The operation type (e.g. "TOOL_CALL", "RESOURCE_READ", "CACHE_HIT").
+    params : dict | None
+        The request parameters. PII fields will be masked.
+    response : Any
+        The response data. PII fields will be masked.
+    error : str | None
         Optional error message if an exception occurred.
     """
     try:
-        log_doc: dict[str, Any] = {
+        # Mask PII in params and response
+        masked_params = mask_pii(params) if params else None
+        masked_response = mask_pii(response)
+
+        # Build log entry
+        log_entry = {
             "endpoint": endpoint,
             "method": method,
-            "params": params,
-            "response": response,
+            "params": masked_params,
             "error": error,
         }
-        insert_document("logs", log_doc)
+
+        # Add response summary (avoid logging huge responses)
+        if isinstance(masked_response, dict):
+            # For dict responses, log structure info
+            log_entry["response_keys"] = list(masked_response.keys())
+            if "error" in masked_response or "errors" in masked_response:
+                log_entry["response_error"] = masked_response.get(
+                    "error"
+                ) or masked_response.get("errors")
+        elif isinstance(masked_response, list):
+            log_entry["response_count"] = len(masked_response)
+        else:
+            log_entry["response_type"] = type(masked_response).__name__
+
+        # Log based on error status
+        if error:
+            logger.error(json.dumps(log_entry))
+        else:
+            logger.info(json.dumps(log_entry))
+
     except Exception as logging_exc:
-        # Log the exception to stderr to avoid breaking the main operation
-        # but still capture the error for debugging
-        logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
-        logging.exception(f"Failed to log operation {endpoint} {method}: {logging_exc}")
+        # If logging fails, report to stderr without breaking the operation
+        logger.exception(f"Failed to log operation {endpoint} {method}: {logging_exc}")
