@@ -19,10 +19,12 @@ management and financial reporting.
   operations via the [`splitwise` Python client](https://github.com/namaggarwal/splitwise).
   Each MCP operation stores data in MongoDB, logs the call, and responds with normalized JSON.
 
-* ✅ **Smart Caching Layer** – intelligent MongoDB-based caching with entity-specific TTLs
+* ✅ **Smart Caching Layer with Fallback** – intelligent MongoDB-based caching with entity-specific TTLs
   reduces API calls and improves performance. GET operations check cache first (expenses: 5min,
   groups: 60min, categories: 24h), while write operations auto-invalidate affected caches.
-  Cache can be disabled via environment variable for testing or real-time requirements.
+  When the Splitwise API is unavailable, the system gracefully serves stale cached data for
+  read operations (write operations always fail to maintain data integrity). Cache can be 
+  disabled via environment variable for testing or real-time requirements.
 
 * ✅ **Database Persistence** – all operations are persisted in MongoDB
   collections named after the API method (e.g. `list_groups`, `create_expense`) with
@@ -134,13 +136,13 @@ The service requires minimal environment configuration:
 - `MCP_HOST` - Host to bind to (defaults to `0.0.0.0` for HTTP transport)
 - `MCP_PORT` - Port for HTTP transport (defaults to `8000`)
 - `CACHE_ENABLED` - Enable/disable caching layer (defaults to `true`)
-- `CACHE_TTL_EXPENSES` - Cache TTL for expenses in minutes (defaults to `5`)
-- `CACHE_TTL_FRIENDS` - Cache TTL for friends in minutes (defaults to `5`)
-- `CACHE_TTL_USERS` - Cache TTL for users in minutes (defaults to `60`)
-- `CACHE_TTL_GROUPS` - Cache TTL for groups in minutes (defaults to `60`)
-- `CACHE_TTL_CATEGORIES` - Cache TTL for categories in minutes (defaults to `1440`)
-- `CACHE_TTL_CURRENCIES` - Cache TTL for currencies in minutes (defaults to `1440`)
-- `CACHE_TTL_NOTIFICATIONS` - Cache TTL for notifications in minutes (defaults to `0` - never cache)
+- `CACHE_TTL_EXPENSES_MINUTES` - Cache TTL for expenses in minutes (defaults to `5`)
+- `CACHE_TTL_FRIENDS_MINUTES` - Cache TTL for friends in minutes (defaults to `5`)
+- `CACHE_TTL_USERS_MINUTES` - Cache TTL for users in minutes (defaults to `60`)
+- `CACHE_TTL_GROUPS_MINUTES` - Cache TTL for groups in minutes (defaults to `60`)
+- `CACHE_TTL_CATEGORIES_MINUTES` - Cache TTL for categories in minutes (defaults to `1440`)
+- `CACHE_TTL_CURRENCIES_MINUTES` - Cache TTL for currencies in minutes (defaults to `1440`)
+- `CACHE_TTL_NOTIFICATIONS_MINUTES` - Cache TTL for notifications in minutes (defaults to `0` - never cache)
 
 **MCP Endpoint Configuration:**
 - **Local Development** (stdio): No configuration needed, server runs on stdio transport
@@ -239,6 +241,10 @@ All MCP operations automatically persist data to MongoDB with intelligent cachin
   - Creating/updating/deleting expenses invalidates expense cache
   - Group operations invalidate group and member caches
   - Friend operations invalidate friend cache
+- **Cache Fallback**: When Splitwise API is unavailable, read operations gracefully
+  serve stale cached data (write operations always fail for data integrity)
+  - Fallback logged with operation type `CACHE_FALLBACK` for observability
+  - API errors logged with operation type `API_ERROR` when no cache available
 - **Graceful Degradation**: Server continues operation if database is unavailable
 - **Cache Control**: Set `CACHE_ENABLED=false` to disable caching entirely
 

@@ -424,6 +424,140 @@ class TestCallMappedMethod:
             assert result == api_response
 
 
+class TestCacheFallback:
+    """Test cache fallback mechanism when API fails."""
+
+    def test_api_failure_with_stale_cache_available(self):
+        """Test that stale cache is used when API call fails."""
+        mock_client = Mock()
+        api_error = Exception("API connection failed")
+        mock_client.call_mapped_method.side_effect = api_error
+
+        stale_data = {"groups": [{"id": 1, "name": "Stale Group"}]}
+        mock_collection = Mock()
+        mock_collection.find_one.return_value = {
+            "method": "list_groups",
+            "response_data": stale_data,
+            "last_updated_date": (datetime.now(UTC) - timedelta(hours=2)).isoformat(),
+        }
+        mock_db = Mock()
+        mock_db.__getitem__ = Mock(return_value=mock_collection)
+
+        with (
+            patch(
+                "app.cached_splitwise_client.SplitwiseClient", return_value=mock_client
+            ),
+            patch("app.cached_splitwise_client.get_db", return_value=mock_db),
+            patch("app.cached_splitwise_client.log_operation") as mock_log,
+        ):
+            client = CachedSplitwiseClient(api_key="test")
+            client._client = mock_client
+
+            # Should return stale cache data instead of raising error
+            result = client.call_mapped_method("list_groups")
+            assert result == stale_data
+
+            # Should log fallback
+            mock_log.assert_any_call(
+                "list_groups",
+                "CACHE_FALLBACK",
+                {},
+                {"cached": True, "stale": True, "error": str(api_error)},
+            )
+
+    def test_api_failure_without_cache_raises_error(self):
+        """Test that error is raised when API fails and no cache available."""
+        import pytest
+
+        mock_client = Mock()
+        api_error = Exception("API connection failed")
+        mock_client.call_mapped_method.side_effect = api_error
+
+        mock_collection = Mock()
+        mock_collection.find_one.return_value = None  # No cache available
+        mock_db = Mock()
+        mock_db.__getitem__ = Mock(return_value=mock_collection)
+
+        with (
+            patch(
+                "app.cached_splitwise_client.SplitwiseClient", return_value=mock_client
+            ),
+            patch("app.cached_splitwise_client.get_db", return_value=mock_db),
+            patch("app.cached_splitwise_client.log_operation") as mock_log,
+        ):
+            client = CachedSplitwiseClient(api_key="test")
+            client._client = mock_client
+
+            # Should raise the original API error
+            with pytest.raises(Exception, match="API connection failed"):
+                client.call_mapped_method("list_groups")
+
+            # Should log the error
+            mock_log.assert_any_call(
+                "list_groups",
+                "API_ERROR",
+                {},
+                None,
+                str(api_error),
+            )
+
+    def test_write_operation_failure_no_fallback(self):
+        """Test that write operations don't use cache fallback."""
+        import pytest
+
+        mock_client = Mock()
+        api_error = Exception("API connection failed")
+        mock_client.call_mapped_method.side_effect = api_error
+
+        with (
+            patch(
+                "app.cached_splitwise_client.SplitwiseClient", return_value=mock_client
+            ),
+            patch("app.cached_splitwise_client.get_db"),
+            patch("app.cached_splitwise_client.log_operation") as mock_log,
+        ):
+            client = CachedSplitwiseClient(api_key="test")
+            client._client = mock_client
+
+            # Should raise error for write operations (no fallback)
+            with pytest.raises(Exception, match="API connection failed"):
+                client.call_mapped_method("create_expense", cost="25.00")
+
+            # Should log the error
+            mock_log.assert_any_call(
+                "create_expense",
+                "API_ERROR",
+                {"cost": "25.00"},
+                None,
+                str(api_error),
+            )
+
+    def test_fallback_with_cache_disabled(self):
+        """Test that cache fallback doesn't happen when cache is disabled."""
+        import pytest
+
+        mock_client = Mock()
+        api_error = Exception("API connection failed")
+        mock_client.call_mapped_method.side_effect = api_error
+
+        with (
+            patch(
+                "app.cached_splitwise_client.SplitwiseClient", return_value=mock_client
+            ),
+            patch.dict(os.environ, {"CACHE_ENABLED": "false"}),
+            patch("app.cached_splitwise_client.get_db") as mock_get_db,
+        ):
+            client = CachedSplitwiseClient(api_key="test")
+            client._client = mock_client
+
+            # Should raise error (no fallback when cache disabled)
+            with pytest.raises(Exception, match="API connection failed"):
+                client.call_mapped_method("list_groups")
+
+            # Should not access database
+            mock_get_db.assert_not_called()
+
+
 class TestCacheInvalidation:
     """Test cache invalidation for write operations."""
 

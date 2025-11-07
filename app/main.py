@@ -67,14 +67,22 @@ async def _call_splitwise_resource(
         return json.dumps(response_data)
     except Exception as exc:
         with suppress(Exception):
-            log_operation(method_name, "ERROR", kwargs, {"error": str(exc)})
+            # Pass error in 5th parameter as per log_operation signature
+            log_operation(method_name, "ERROR", kwargs, None, str(exc))
         raise
 
 
 async def _call_splitwise_tool(
     ctx: Context, method_name: str, **kwargs: Any
 ) -> dict[str, Any]:
-    """Helper function for MCP tools - returns structured data."""
+    """Helper function for MCP tools - returns structured data.
+
+    For backward compatibility, list responses are wrapped with method-specific keys:
+    - list_groups -> {"groups": [...]}
+    - list_expenses -> {"expenses": [...]}
+    - list_friends -> {"friends": [...]}
+    - etc.
+    """
     client = ctx.request_context.lifespan_context["client"]
 
     try:
@@ -85,9 +93,15 @@ async def _call_splitwise_tool(
 
         # Ensure response is always a dictionary for MCP tool compatibility
         if not isinstance(response_data, dict):
-            # If response is a list, wrap it in a dict
+            # If response is a list, wrap it with method-specific semantic key
             if isinstance(response_data, list):
-                response_data = {"items": response_data}
+                # Extract semantic key from method name (e.g., "list_groups" -> "groups")
+                if method_name.startswith("list_"):
+                    semantic_key = method_name[5:]  # Remove "list_" prefix
+                    response_data = {semantic_key: response_data}
+                else:
+                    # Fallback to generic wrapper for other list methods
+                    response_data = {"items": response_data}
             else:
                 # For other types (primitives), wrap in a dict
                 response_data = {"result": response_data}
@@ -95,7 +109,8 @@ async def _call_splitwise_tool(
         return response_data
     except Exception as exc:
         with suppress(Exception):
-            log_operation(method_name, "ERROR", kwargs, {"error": str(exc)})
+            # Pass error in 5th parameter as per log_operation signature
+            log_operation(method_name, "ERROR", kwargs, None, str(exc))
         raise
 
 

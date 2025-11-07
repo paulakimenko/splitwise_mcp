@@ -108,11 +108,18 @@ class CachedSplitwiseClient:
             # Invalid timestamp format - consider cache invalid
             return False
 
-    def _get_from_cache(self, method_name: str, **kwargs: Any) -> Any | None:
+    def _get_from_cache(
+        self, method_name: str, allow_stale: bool = False, **kwargs: Any
+    ) -> Any | None:
         """Attempt to retrieve data from cache.
 
+        Args:
+            method_name: Name of the Splitwise method
+            allow_stale: If True, return stale cache data even if expired
+            **kwargs: Method parameters for cache key
+
         Returns:
-            Cached data if valid, None if cache miss or invalid
+            Cached data if valid (or stale if allow_stale=True), None if cache miss
         """
         if not self._cache_enabled:
             return None
@@ -138,6 +145,10 @@ class CachedSplitwiseClient:
             cached = collection.find_one(query)
             if not cached:
                 return None
+
+            # If allowing stale data, return immediately (fallback mode)
+            if allow_stale:
+                return cached.get("response_data")
 
             # Check if cache is still valid
             last_updated = cached.get("last_updated_date")
@@ -239,6 +250,9 @@ class CachedSplitwiseClient:
 
         For READ methods (GET), checks cache first before calling API.
         For WRITE methods (POST), bypasses cache and invalidates affected data.
+
+        Implements fallback mechanism: if API call fails for READ methods,
+        returns stale cached data if available to maintain service availability.
         """
         # Check cache for READ methods
         if method_name in self.METHOD_TO_ENTITY_MAP:
@@ -248,18 +262,44 @@ class CachedSplitwiseClient:
                 return cached_data
 
         # Cache miss or WRITE method - call API
-        result = self._client.call_mapped_method(method_name, **kwargs)
+        try:
+            result = self._client.call_mapped_method(method_name, **kwargs)
 
-        # Cache the result for READ methods
-        if method_name in self.METHOD_TO_ENTITY_MAP:
-            response_data = self._client.convert(result)
-            self._save_to_cache(method_name, response_data, **kwargs)
-            log_operation(method_name, "CACHE_MISS", kwargs, {"cached": False})
-        else:
-            # For WRITE methods, invalidate affected cache entries
-            self._invalidate_cache_for_write(method_name, **kwargs)
+            # Cache the result for READ methods
+            if method_name in self.METHOD_TO_ENTITY_MAP:
+                response_data = self._client.convert(result)
+                self._save_to_cache(method_name, response_data, **kwargs)
+                log_operation(method_name, "CACHE_MISS", kwargs, {"cached": False})
+            else:
+                # For WRITE methods, invalidate affected cache entries
+                self._invalidate_cache_for_write(method_name, **kwargs)
 
-        return result
+            return result
+
+        except Exception as exc:
+            # For READ methods, try to use stale cache as fallback
+            if method_name in self.METHOD_TO_ENTITY_MAP:
+                stale_data = self._get_from_cache(
+                    method_name, allow_stale=True, **kwargs
+                )
+                if stale_data is not None:
+                    log_operation(
+                        method_name,
+                        "CACHE_FALLBACK",
+                        kwargs,
+                        {"cached": True, "stale": True, "error": str(exc)},
+                    )
+                    return stale_data
+
+            # No cache available or WRITE method - re-raise the error
+            log_operation(
+                method_name,
+                "API_ERROR",
+                kwargs,
+                None,
+                str(exc),
+            )
+            raise
 
     def _invalidate_cache_for_write(self, method_name: str, **kwargs: Any) -> None:
         """Invalidate cache entries affected by write operations."""
