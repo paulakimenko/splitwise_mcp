@@ -19,7 +19,7 @@ from typing import Any
 # Using root logger ensures logs appear in all environments (local, Docker, remote)
 logger = logging.getLogger("splitwise_mcp")
 logger.setLevel(logging.INFO)
-logger.propagate = True  # Allow propagation to root logger
+logger.propagate = False  # Disable propagation to avoid duplicate logs
 
 # Add stdout handler if not already configured
 if not logger.handlers:
