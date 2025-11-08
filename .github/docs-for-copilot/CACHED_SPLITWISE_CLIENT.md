@@ -11,19 +11,20 @@
 
 1. [Executive Summary](#executive-summary)
 2. [Motivation & Goals](#motivation--goals)
-3. [Architecture Overview](#architecture-overview)
-4. [Data Model & Entity Normalization](#data-model--entity-normalization)
-5. [Caching Strategy](#caching-strategy)
-6. [Cache Invalidation Logic](#cache-invalidation-logic)
-7. [MongoDB Collections Schema](#mongodb-collections-schema)
-8. [API Method Coverage](#api-method-coverage)
-9. [Configuration](#configuration)
-10. [Data Flow Diagrams](#data-flow-diagrams)
-11. [Edge Cases & Error Handling](#edge-cases--error-handling)
-12. [Implementation Plan](#implementation-plan)
-13. [Testing Strategy](#testing-strategy)
-14. [Performance Considerations](#performance-considerations)
-15. [Future Enhancements](#future-enhancements)
+3. [⚠️ CRITICAL: Cache Query Parameters](#️-critical-cache-query-parameters)
+4. [Architecture Overview](#architecture-overview)
+5. [Data Model & Entity Normalization](#data-model--entity-normalization)
+6. [Caching Strategy](#caching-strategy)
+7. [Cache Invalidation Logic](#cache-invalidation-logic)
+8. [MongoDB Collections Schema](#mongodb-collections-schema)
+9. [API Method Coverage](#api-method-coverage)
+10. [Configuration](#configuration)
+11. [Data Flow Diagrams](#data-flow-diagrams)
+12. [Edge Cases & Error Handling](#edge-cases--error-handling)
+13. [Implementation Plan](#implementation-plan)
+14. [Testing Strategy](#testing-strategy)
+15. [Performance Considerations](#performance-considerations)
+16. [Future Enhancements](#future-enhancements)
 
 ---
 
@@ -58,6 +59,369 @@ The cache will act as a **write-through cache** with smart invalidation rules th
 - ✅ **Reliability**: Service remains functional during API outages (stale cache acceptable)
 - ✅ **Compatibility**: Zero breaking changes to existing MCP tool interfaces
 - ✅ **Observability**: Cache hit/miss metrics exposed for monitoring
+
+---
+
+## ⚠️ CRITICAL: Cache Query Parameters
+
+### The Problem: Filter Parameters MUST Be Included in Cache Keys
+
+**This section documents a critical caching bug that was discovered and fixed.**
+
+### Bug Description
+
+The initial implementation of `_build_cache_query()` only included `group_id` and `friend_id` in the cache lookup key for `list_expenses`. This caused **different API queries with different filter parameters to incorrectly share the same cached data**.
+
+#### Example Scenario That Failed ❌
+
+```python
+# Request 1: Cache expenses for last 2 months
+list_expenses(dated_after="2025-09-08", dated_before="2025-11-08")
+# Cache key: {"method": "list_expenses"}  ← No date filters!
+# Result: Fetches from API, caches response
+
+# Request 2: Cache expenses for last month (1 minute later)
+list_expenses(dated_after="2025-10-08", dated_before="2025-11-08")
+# Cache key: {"method": "list_expenses"}  ← SAME KEY!
+# Result: Returns 2-month data instead of 1-month data ❌
+```
+
+**Impact**: User receives incorrect data (2 months instead of 1 month) because the cache query ignored the date range parameters.
+
+---
+
+### The Fix: Complete Parameter Inclusion ✅
+
+All filter parameters that affect the API response **MUST** be included in the cache query. The fixed implementation includes:
+
+```python
+def _build_cache_query(method_name: str, **kwargs) -> dict[str, Any] | None:
+    """Build MongoDB query for cache lookup based on method and parameters.
+    
+    CRITICAL: All filter parameters that affect the API response MUST be included
+    in the cache query. Otherwise, different queries will incorrectly share the same
+    cached data, leading to incorrect results.
+    """
+    if method_name == "list_expenses":
+        query = {"method": method_name}
+        
+        # Entity filters
+        if "group_id" in kwargs:
+            query["group_id"] = kwargs["group_id"]
+        if "friend_id" in kwargs:
+            query["friend_id"] = kwargs["friend_id"]
+        
+        # Date range filters - CRITICAL for correctness
+        if "dated_after" in kwargs:
+            query["dated_after"] = kwargs["dated_after"]
+        if "dated_before" in kwargs:
+            query["dated_before"] = kwargs["dated_before"]
+        if "updated_after" in kwargs:
+            query["updated_after"] = kwargs["updated_after"]
+        if "updated_before" in kwargs:
+            query["updated_before"] = kwargs["updated_before"]
+        
+        # Pagination - CRITICAL for correctness
+        if "limit" in kwargs:
+            query["limit"] = kwargs["limit"]
+        if "offset" in kwargs:
+            query["offset"] = kwargs["offset"]
+        
+        return query
+```
+
+#### Example Scenario That Works ✅
+
+```python
+# Request 1: Cache expenses for last 2 months
+list_expenses(dated_after="2025-09-08", dated_before="2025-11-08")
+# Cache key: {
+#   "method": "list_expenses",
+#   "dated_after": "2025-09-08",
+#   "dated_before": "2025-11-08"
+# }
+# Result: Fetches from API, caches with FULL parameter key
+
+# Request 2: Cache expenses for last month (1 minute later)
+list_expenses(dated_after="2025-10-08", dated_before="2025-11-08")
+# Cache key: {
+#   "method": "list_expenses",
+#   "dated_after": "2025-10-08",  ← DIFFERENT date
+#   "dated_before": "2025-11-08"
+# }
+# Result: Different cache key → Fetches from API → Correct 1-month data ✅
+```
+
+---
+
+### Complete Analysis: All Entity Types
+
+This section reviews **every cacheable entity** to ensure filter parameters are correctly handled.
+
+#### 1. ✅ Expenses (`list_expenses`)
+
+**API Parameters** (from Splitwise OpenAPI):
+- `group_id` (integer) - Filter by group
+- `friend_id` (integer) - Filter by friend relationship
+- `dated_after` (datetime) - Filter by expense date (after)
+- `dated_before` (datetime) - Filter by expense date (before)
+- `updated_after` (datetime) - Filter by last update (after)
+- `updated_before` (datetime) - Filter by last update (before)
+- `limit` (integer, default: 20) - Pagination size
+- `offset` (integer, default: 0) - Pagination offset
+
+**Cache Query** ✅ **ALL parameters included**:
+```python
+{
+    "method": "list_expenses",
+    "group_id": 12345,              # Entity filter
+    "friend_id": 67890,             # Entity filter
+    "dated_after": "2025-10-01",    # Date filter
+    "dated_before": "2025-11-01",   # Date filter
+    "updated_after": "2025-10-15",  # Update filter
+    "updated_before": "2025-10-20", # Update filter
+    "limit": 50,                    # Pagination
+    "offset": 100                   # Pagination
+}
+```
+
+**Why This Matters**:
+- Different date ranges → Different expenses → Must be separate cache entries
+- Different pagination → Different results → Must be separate cache entries
+- Without this: User requesting "last month" would get "last 2 months" data ❌
+
+---
+
+#### 2. ✅ Expense Detail (`get_expense`)
+
+**API Parameters**:
+- `id` (integer) - Expense ID
+
+**Cache Query** ✅ **Correct**:
+```python
+{
+    "method": "get_expense",
+    "expense_id": 4142333569
+}
+```
+
+**Why This Matters**:
+- Single expense lookup by ID
+- No filter parameters beyond the ID
+- Cache behavior: **Correct** ✅
+
+---
+
+#### 3. ✅ Groups (`list_groups`)
+
+**API Parameters**: None (returns all groups for current user)
+
+**Cache Query** ✅ **Correct**:
+```python
+{
+    "method": "list_groups"
+}
+```
+
+**Why This Matters**:
+- No filter parameters
+- Always returns same data for a user
+- TTL-based invalidation (1 hour) is appropriate
+- Cache behavior: **Correct** ✅
+
+---
+
+#### 4. ✅ Group Detail (`get_group`)
+
+**API Parameters**:
+- `id` (integer) - Group ID
+
+**Cache Query** ✅ **Correct**:
+```python
+{
+    "method": "get_group",
+    "group_id": 12345
+}
+```
+
+**Why This Matters**:
+- Single group lookup by ID
+- No filter parameters beyond the ID
+- Cache behavior: **Correct** ✅
+
+---
+
+#### 5. ✅ Friends (`list_friends`)
+
+**API Parameters**: None (returns all friends for current user)
+
+**Cache Query** ✅ **Correct**:
+```python
+{
+    "method": "list_friends"
+}
+```
+
+**Why This Matters**:
+- No filter parameters
+- Always returns same data for a user
+- TTL-based invalidation (5 minutes) handles balance changes
+- Cache behavior: **Correct** ✅
+
+---
+
+#### 6. ✅ Friend Detail (`get_friend`)
+
+**API Parameters**:
+- `id` (integer) - Friend/User ID
+
+**Cache Query** ✅ **Correct**:
+```python
+{
+    "method": "get_friend",
+    "friend_id": 67890
+}
+```
+
+**Why This Matters**:
+- Single friend lookup by ID
+- No filter parameters beyond the ID
+- Cache behavior: **Correct** ✅
+
+---
+
+#### 7. ✅ Current User (`get_current_user`)
+
+**API Parameters**: None (returns authenticated user)
+
+**Cache Query** ✅ **Correct**:
+```python
+{
+    "method": "get_current_user"
+}
+```
+
+**Why This Matters**:
+- No filter parameters
+- Always returns same user
+- TTL-based invalidation (1 hour) is appropriate
+- Cache behavior: **Correct** ✅
+
+---
+
+#### 8. ✅ Categories (`list_categories`)
+
+**API Parameters**: None (returns static category list)
+
+**Cache Query** ✅ **Correct**:
+```python
+{
+    "method": "list_categories"
+}
+```
+
+**Why This Matters**:
+- No filter parameters
+- Static/rarely-changing data
+- Long TTL (24 hours) is appropriate
+- Cache behavior: **Correct** ✅
+
+---
+
+#### 9. ✅ Currencies (`list_currencies`)
+
+**API Parameters**: None (returns static currency list)
+
+**Cache Query** ✅ **Correct**:
+```python
+{
+    "method": "list_currencies"
+}
+```
+
+**Why This Matters**:
+- No filter parameters
+- Static/rarely-changing data
+- Long TTL (24 hours) is appropriate
+- Cache behavior: **Correct** ✅
+
+---
+
+#### 10. ⚠️ Notifications (`list_notifications`)
+
+**API Parameters** (from Splitwise docs):
+- `updated_after` (datetime) - Filter by update time
+- `limit` (integer) - Pagination size
+
+**Cache Query** ⚠️ **NOT CACHED** (by design):
+```python
+# Notifications are never cached (TTL = 0)
+# Always fetch fresh from API
+```
+
+**Why This Matters**:
+- Notifications must always be fresh
+- TTL set to 0 to disable caching
+- Cache behavior: **Correct by Design** ✅
+
+---
+
+### Summary: Cache Query Correctness
+
+| Entity Type | Filter Parameters | Cache Query Includes All Filters? | Status |
+|-------------|-------------------|-----------------------------------|--------|
+| **Expenses** | group_id, friend_id, dated_after, dated_before, updated_after, updated_before, limit, offset | ✅ Yes (FIXED) | ✅ Correct |
+| **Expense Detail** | id | ✅ Yes | ✅ Correct |
+| **Groups** | None | ✅ N/A | ✅ Correct |
+| **Group Detail** | id | ✅ Yes | ✅ Correct |
+| **Friends** | None | ✅ N/A | ✅ Correct |
+| **Friend Detail** | id | ✅ Yes | ✅ Correct |
+| **Current User** | None | ✅ N/A | ✅ Correct |
+| **Categories** | None | ✅ N/A | ✅ Correct |
+| **Currencies** | None | ✅ N/A | ✅ Correct |
+| **Notifications** | updated_after, limit | ⚠️ Not Cached | ✅ By Design |
+
+---
+
+### Key Takeaways
+
+1. **Filter Parameters = Cache Key Components**: Any parameter that changes the API response MUST be in the cache query
+2. **Pagination Parameters Matter**: `limit` and `offset` affect results, so they're part of the cache key
+3. **Date Range Parameters Are Critical**: Different date ranges = different data = separate cache entries
+4. **Entity IDs Always Included**: Single-entity lookups (get_expense, get_group, etc.) always include the ID
+5. **Static Data = Simple Cache Keys**: Categories/currencies have no filters, so simple method-based keys work
+6. **Notifications Never Cached**: TTL=0 ensures always-fresh notification data
+
+---
+
+### Testing Recommendations
+
+**Test Case 1: Date Range Caching**
+```python
+# Should create separate cache entries
+result1 = list_expenses(dated_after="2025-09-01", dated_before="2025-10-01")
+result2 = list_expenses(dated_after="2025-10-01", dated_before="2025-11-01")
+assert result1 != result2  # Different data
+assert cache_has_entries(2)  # Two separate cache entries
+```
+
+**Test Case 2: Pagination Caching**
+```python
+# Should create separate cache entries
+page1 = list_expenses(limit=20, offset=0)
+page2 = list_expenses(limit=20, offset=20)
+assert page1 != page2  # Different expenses
+assert cache_has_entries(2)  # Two separate cache entries
+```
+
+**Test Case 3: Entity Filter Caching**
+```python
+# Should create separate cache entries
+group_expenses = list_expenses(group_id=12345)
+friend_expenses = list_expenses(friend_id=67890)
+assert group_expenses != friend_expenses
+assert cache_has_entries(2)  # Two separate cache entries
+```
 
 ---
 
@@ -117,6 +481,50 @@ The cache will act as a **write-through cache** with smart invalidation rules th
 
 ## Data Model & Entity Normalization
 
+### Core Normalization Principles
+
+**1. Each Entity Type → Separate Collection**
+- Users, expenses, groups, categories, etc. each have dedicated collections
+- No embedded documents (except simple value objects like `picture`, `receipt`)
+- All relationships via ID references, not embedded objects
+
+**2. Each Entity Instance → Separate Document**
+- One expense = one document in `expenses` collection
+- One user = one document in `users` collection
+- List responses (`GET /get_expenses`) normalize each item into separate document
+
+**3. References Instead of Embedding**
+- ❌ **WRONG**: Store user object inside expense document
+  ```json
+  {
+    "_id": "expense_123",
+    "created_by": {
+      "id": 8633344,
+      "first_name": "Test",
+      "last_name": "User",
+      "email": "testuser@example.com"
+    }
+  }
+  ```
+
+- ✅ **CORRECT**: Store only user ID reference
+  ```json
+  {
+    "_id": "expense_123",
+    "created_by_user_id": 8633344  // Reference to users collection
+  }
+  ```
+
+**4. Junction Tables for Many-to-Many Relationships**
+- Expense ↔ Users: `expense_shares` collection
+- Group ↔ Users: `group_members` collection
+- Friend ↔ Balances: `friend_balances` collection
+
+**5. Denormalization Only for Query Performance**
+- Keep array of user IDs in expense for fast lookups: `share_user_ids`
+- Keep array of member IDs in group: `member_ids`
+- These are duplicates of junction table data, optimized for queries
+
 ### Entity Extraction Rules
 
 When an API response is received, normalize it into **atomic entities** stored in separate collections:
@@ -138,6 +546,7 @@ When an API response is received, normalize it into **atomic entities** stored i
           "first_name": "Alice",
           "last_name": "Smith",
           "email": "alice@example.com",
+          "picture": {"medium": "https://..."},
           "balance": [
             {"currency_code": "USD", "amount": "-45.50"}
           ]
@@ -147,6 +556,7 @@ When an API response is received, normalize it into **atomic entities** stored i
           "first_name": "Bob",
           "last_name": "Jones",
           "email": "bob@example.com",
+          "picture": {"medium": "https://..."},
           "balance": [
             {"currency_code": "USD", "amount": "45.50"}
           ]
@@ -159,9 +569,9 @@ When an API response is received, normalize it into **atomic entities** stored i
 }
 ```
 
-**Normalized Storage:**
+**Normalized Storage (References Only, No Embedded Documents):**
 
-1. **`groups` collection** (keyed by `group_id`):
+1. **`groups` collection** - Store group metadata with member references:
 ```json
 {
   "_id": "group_12345",
@@ -169,59 +579,63 @@ When an API response is received, normalize it into **atomic entities** stored i
   "name": "House Expenses",
   "group_type": "home",
   "updated_at": "2025-11-03T10:15:30Z",
-  "member_ids": [67890, 54321],
+  "member_ids": [67890, 54321],  // References to users collection
   "original_debts": [...],
   "simplified_debts": [...],
   "last_updated_date": "2025-11-03T14:32:28Z"
 }
 ```
 
-2. **`users` collection** (keyed by `user_id`):
+2. **`users` collection** - Each user as separate document:
 ```json
-[
-  {
-    "_id": "user_67890",
-    "id": 67890,
-    "first_name": "Alice",
-    "last_name": "Smith",
-    "email": "alice@example.com",
-    "registration_status": "confirmed",
-    "last_updated_date": "2025-11-03T14:32:28Z"
-  },
-  {
-    "_id": "user_54321",
-    "id": 54321,
-    "first_name": "Bob",
-    "last_name": "Jones",
-    "email": "bob@example.com",
-    "registration_status": "confirmed",
-    "last_updated_date": "2025-11-03T14:32:28Z"
-  }
-]
+{
+  "_id": "user_67890",
+  "id": 67890,
+  "first_name": "Alice",
+  "last_name": "Smith",
+  "email": "alice@example.com",
+  "picture": {"medium": "https://..."},
+  "registration_status": "confirmed",
+  "last_updated_date": "2025-11-03T14:32:28Z"
+}
 ```
 
-3. **`group_members` collection** (junction table for balances):
 ```json
-[
-  {
-    "_id": "group_12345_user_67890",
-    "group_id": 12345,
-    "user_id": 67890,
-    "balances": [
-      {"currency_code": "USD", "amount": "-45.50"}
-    ],
-    "last_updated_date": "2025-11-03T14:32:28Z"
-  },
-  {
-    "_id": "group_12345_user_54321",
-    "group_id": 12345,
-    "user_id": 54321,
-    "balances": [
-      {"currency_code": "USD", "amount": "45.50"}
-    ],
-    "last_updated_date": "2025-11-03T14:32:28Z"
-  }
-]
+{
+  "_id": "user_54321",
+  "id": 54321,
+  "first_name": "Bob",
+  "last_name": "Jones",
+  "email": "bob@example.com",
+  "picture": {"medium": "https://..."},
+  "registration_status": "confirmed",
+  "last_updated_date": "2025-11-03T14:32:28Z"
+}
+```
+
+3. **`group_members` collection** - Junction documents for many-to-many relationships:
+```json
+{
+  "_id": "group_12345_user_67890",
+  "group_id": 12345,        // Reference to groups collection
+  "user_id": 67890,         // Reference to users collection
+  "balances": [
+    {"currency_code": "USD", "amount": "-45.50"}
+  ],
+  "last_updated_date": "2025-11-03T14:32:28Z"
+}
+```
+
+```json
+{
+  "_id": "group_12345_user_54321",
+  "group_id": 12345,        // Reference to groups collection
+  "user_id": 54321,         // Reference to users collection
+  "balances": [
+    {"currency_code": "USD", "amount": "45.50"}
+  ],
+  "last_updated_date": "2025-11-03T14:32:28Z"
+}
 ```
 
 ### Normalization Patterns by Entity Type
@@ -239,6 +653,166 @@ When an API response is received, normalize it into **atomic entities** stored i
 | `GET /get_categories` | `categories` | `subcategories` | - |
 | `GET /get_currencies` | `currencies` | - | - |
 | `GET /get_notifications` | `notifications` | `users` (created_by) | - |
+
+### Complete Normalization Example: `GET /get_expense/4142333569`
+
+**Original API Response:**
+```json
+{
+  "id": 4142333569,
+  "group_id": 35084033,
+  "description": "Iqos",
+  "cost": "4.8",
+  "currency_code": "EUR",
+  "date": "2025-11-07T17:41:32Z",
+  "created_at": "2025-11-07T17:42:10Z",
+  "updated_at": "2025-11-07T17:42:10Z",
+  "category": {
+    "id": 26,
+    "name": "Food and drink - Other"
+  },
+  "created_by": {
+    "id": 8633344,
+    "first_name": "Test",
+    "last_name": "User",
+    "email": "testuser@example.com",
+    "picture": {
+      "medium": "https://splitwise.s3.amazonaws.com/uploads/user/avatar/8633344/medium_95fe87dc.jpeg"
+    }
+  },
+  "repayments": [
+    {
+      "from": 34726426,
+      "to": 8633344,
+      "amount": "4.8"
+    }
+  ],
+  "users": [
+    {
+      "user": {
+        "id": 8633344,
+        "first_name": "Test",
+        "last_name": "User"
+      },
+      "paid_share": "4.8",
+      "owed_share": "0.0",
+      "net_balance": "4.8"
+    },
+    {
+      "user": {
+        "id": 34726426,
+        "first_name": "леся",
+        "last_name": "бучма"
+      },
+      "paid_share": "0.0",
+      "owed_share": "4.8",
+      "net_balance": "-4.8"
+    }
+  ]
+}
+```
+
+**Normalized into 9 separate documents across 5 collections:**
+
+**1. `expenses` collection** (1 document):
+```json
+{
+  "_id": "expense_4142333569",
+  "id": 4142333569,
+  "group_id": 35084033,
+  "description": "Iqos",
+  "cost": "4.8",
+  "currency_code": "EUR",
+  "date": "2025-11-07T17:41:32Z",
+  "created_at": "2025-11-07T17:42:10Z",
+  "updated_at": "2025-11-07T17:42:10Z",
+  "category_id": 26,
+  "created_by_user_id": 8633344,
+  "share_user_ids": [8633344, 34726426],
+  "repayment_user_ids": [34726426],
+  "last_updated_date": "2025-11-08T00:26:02.186588+00:00"
+}
+```
+
+**2. `categories` collection** (1 document):
+```json
+{
+  "_id": "category_26",
+  "id": 26,
+  "name": "Food and drink - Other",
+  "last_updated_date": "2025-11-08T00:26:02.186588+00:00"
+}
+```
+
+**3. `users` collection** (2 documents):
+```json
+{
+  "_id": "user_8633344",
+  "id": 8633344,
+  "first_name": "Pavlo",
+  "last_name": "Akimenko",
+  "email": "paulakimenko@gmail.com",
+  "picture": {
+    "medium": "https://splitwise.s3.amazonaws.com/uploads/user/avatar/8633344/medium_95fe87dc.jpeg"
+  },
+  "last_updated_date": "2025-11-08T00:26:02.186588+00:00"
+}
+```
+
+```json
+{
+  "_id": "user_34726426",
+  "id": 34726426,
+  "first_name": "леся",
+  "last_name": "бучма",
+  "last_updated_date": "2025-11-08T00:26:02.186588+00:00"
+}
+```
+
+**4. `expense_shares` collection** (2 documents):
+```json
+{
+  "_id": "expense_4142333569_user_8633344",
+  "expense_id": 4142333569,
+  "user_id": 8633344,
+  "paid_share": "4.8",
+  "owed_share": "0.0",
+  "net_balance": "4.8",
+  "last_updated_date": "2025-11-08T00:26:02.186588+00:00"
+}
+```
+
+```json
+{
+  "_id": "expense_4142333569_user_34726426",
+  "expense_id": 4142333569,
+  "user_id": 34726426,
+  "paid_share": "0.0",
+  "owed_share": "4.8",
+  "net_balance": "-4.8",
+  "last_updated_date": "2025-11-08T00:26:02.186588+00:00"
+}
+```
+
+**5. `repayments` collection** (1 document):
+```json
+{
+  "_id": "expense_4142333569_repayment_34726426_to_8633344",
+  "expense_id": 4142333569,
+  "from_user_id": 34726426,
+  "to_user_id": 8633344,
+  "amount": "4.8",
+  "currency_code": null,
+  "last_updated_date": "2025-11-08T00:26:02.186588+00:00"
+}
+```
+
+**Key Benefits of This Normalization:**
+- ✅ **No data duplication**: User info stored once, referenced by ID
+- ✅ **Atomic updates**: Updating user profile updates all expenses automatically
+- ✅ **Efficient queries**: Can query expenses by user_id without scanning all expenses
+- ✅ **Flexible aggregation**: Can join expense + user + category data on-demand
+- ✅ **Independent TTLs**: Categories cached 24h, expenses cached 5min
 
 ---
 
@@ -281,6 +855,91 @@ collection.update_one(
 - Avoids duplicate entities
 - Preserves historical data (if needed via versioning)
 - Atomic operation (no race conditions)
+
+### Data Retrieval & Reconstruction
+
+**When serving cached data, we need to reconstruct the original API response format:**
+
+```python
+async def get_cached_expense(expense_id: int) -> dict:
+    """
+    Retrieve expense from cache and reconstruct full API response.
+    
+    Steps:
+    1. Fetch expense document from `expenses` collection
+    2. Fetch related users from `users` collection (using share_user_ids)
+    3. Fetch category from `categories` collection (using category_id)
+    4. Fetch expense_shares from `expense_shares` collection (using expense_id)
+    5. Fetch repayments from `repayments` collection (using expense_id)
+    6. Reconstruct nested response matching Splitwise API format
+    """
+    
+    # 1. Get expense document
+    expense = db.expenses.find_one({"_id": f"expense_{expense_id}"})
+    
+    # 2. Get all related users (parallel queries)
+    user_ids = expense["share_user_ids"]
+    users = list(db.users.find({"id": {"$in": user_ids}}))
+    users_by_id = {u["id"]: u for u in users}
+    
+    # 3. Get category
+    category = db.categories.find_one({"_id": f"category_{expense['category_id']}"})
+    
+    # 4. Get expense shares
+    shares = list(db.expense_shares.find({"expense_id": expense_id}))
+    
+    # 5. Get repayments
+    repayments = list(db.repayments.find({"expense_id": expense_id}))
+    
+    # 6. Reconstruct response
+    return {
+        "id": expense["id"],
+        "group_id": expense["group_id"],
+        "description": expense["description"],
+        "cost": expense["cost"],
+        "currency_code": expense["currency_code"],
+        "date": expense["date"],
+        "created_at": expense["created_at"],
+        "updated_at": expense["updated_at"],
+        "category": {
+            "id": category["id"],
+            "name": category["name"]
+        },
+        "created_by": {
+            "id": users_by_id[expense["created_by_user_id"]]["id"],
+            "first_name": users_by_id[expense["created_by_user_id"]]["first_name"],
+            "last_name": users_by_id[expense["created_by_user_id"]]["last_name"],
+            "email": users_by_id[expense["created_by_user_id"]].get("email"),
+            "picture": users_by_id[expense["created_by_user_id"]].get("picture")
+        },
+        "users": [
+            {
+                "user": {
+                    "id": users_by_id[share["user_id"]]["id"],
+                    "first_name": users_by_id[share["user_id"]]["first_name"],
+                    "last_name": users_by_id[share["user_id"]]["last_name"]
+                },
+                "paid_share": share["paid_share"],
+                "owed_share": share["owed_share"],
+                "net_balance": share["net_balance"]
+            }
+            for share in shares
+        ],
+        "repayments": [
+            {
+                "from": rep["from_user_id"],
+                "to": rep["to_user_id"],
+                "amount": rep["amount"]
+            }
+            for rep in repayments
+        ]
+    }
+```
+
+**Performance Optimization:**
+- Use MongoDB aggregation pipelines for complex joins
+- Cache frequently accessed user/category lookups in memory
+- Batch fetch related entities to minimize round-trips
 
 ---
 
@@ -525,33 +1184,41 @@ if await is_entity_cache_valid("notifications", notification["last_updated_date"
 
 #### 4. `expenses` Collection
 
+**Each expense as a separate document with ID references only (no embedded objects):**
+
 ```python
 {
     "_id": "expense_51023",
     "id": 51023,
-    "group_id": 12345,                 # null if not in a group
-    "friendship_id": null,
+    "group_id": 12345,                 # Reference to groups collection (null if not in group)
+    "friendship_id": null,             # Reference to friends collection (for friend-to-friend expenses)
     "cost": "125.50",
     "currency_code": "USD",
     "description": "Grocery shopping",
     "details": "Whole Foods weekly run",
     "date": "2025-11-02T18:30:00Z",
-    "category_id": 15,
+    "category_id": 15,                 # Reference to categories collection
     "payment": false,
     "repeats": false,
     "repeat_interval": "never",
+    "email_reminder": false,
+    "email_reminder_in_advance": -1,
+    "next_repeat": null,
     "created_at": "2025-11-02T19:00:00Z",
     "updated_at": "2025-11-02T19:00:00Z",
     "deleted_at": null,
-    "created_by_id": 67890,
-    "updated_by_id": null,
-    "deleted_by_id": null,
+    "created_by_user_id": 67890,       # Reference to users collection
+    "updated_by_user_id": null,        # Reference to users collection
+    "deleted_by_user_id": null,        # Reference to users collection
     "comments_count": 2,
-    "receipt": {
-        "large": "https://...",
-        "original": "https://..."
-    },
-    "share_user_ids": [67890, 54321],  # Denormalized for lookups
+    "transaction_method": "none",
+    "transaction_confirmed": false,
+    "transaction_id": null,
+    "expense_bundle_id": null,
+    "receipt_large_url": "https://...",
+    "receipt_original_url": "https://...",
+    "share_user_ids": [67890, 54321],  # Denormalized for fast lookups
+    "repayment_user_ids": [54321],     # Users who owe money (denormalized)
     "last_updated_date": "2025-11-03T14:32:28Z"
 }
 ```
@@ -560,17 +1227,23 @@ if await is_entity_cache_valid("notifications", notification["last_updated_date"
 - Primary: `_id`
 - Secondary: `id` (unique)
 - Secondary: `group_id` (for group expense queries)
-- Secondary: `date` (for date-range queries)
+- Secondary: `friendship_id` (for friend expense queries)
+- Secondary: `date` (descending, for date-range queries)
+- Secondary: `category_id` (for category-based queries)
+- Secondary: `created_by_user_id` (for user's created expenses)
 - Secondary: `share_user_ids` (multi-key, for "user's expenses" queries)
 - Compound: `(group_id, date)` (optimized for monthly reports)
+- Compound: `(share_user_ids, date)` (optimized for user expense history)
 
 #### 5. `expense_shares` Collection (Junction Table)
+
+**Each user's share in an expense as separate document:**
 
 ```python
 {
     "_id": "expense_51023_user_67890",
-    "expense_id": 51023,
-    "user_id": 67890,
+    "expense_id": 51023,               # Reference to expenses collection
+    "user_id": 67890,                  # Reference to users collection
     "paid_share": "125.50",
     "owed_share": "62.75",
     "net_balance": "62.75",
@@ -578,25 +1251,89 @@ if await is_entity_cache_valid("notifications", notification["last_updated_date"
 }
 ```
 
-#### 6. `friends` Collection
-
 ```python
 {
-    "_id": "friend_54321",
-    "id": 54321,                       # Friend's user ID
-    "first_name": "Bob",
-    "last_name": "Jones",
-    "email": "bob@example.com",
-    "updated_at": "2025-11-01T08:00:00Z",
-    "group_ids": [12345, 67890],       # Groups shared with this friend
-    "balances": [
-        {"currency_code": "USD", "amount": "45.50"}
-    ],
+    "_id": "expense_51023_user_54321",
+    "expense_id": 51023,               # Reference to expenses collection
+    "user_id": 54321,                  # Reference to users collection
+    "paid_share": "0.00",
+    "owed_share": "62.75",
+    "net_balance": "-62.75",
     "last_updated_date": "2025-11-03T14:32:28Z"
 }
 ```
 
-#### 7. `notifications` Collection
+**Indexes:**
+- Primary: `_id`
+- Secondary: `expense_id` (for all shares of an expense)
+- Secondary: `user_id` (for all shares of a user)
+- Compound: `(user_id, expense_id)` (unique constraint)
+
+#### 6. `repayments` Collection
+
+**Each repayment record as separate document (part of expense):**
+
+```python
+{
+    "_id": "expense_51023_repayment_54321_to_67890",
+    "expense_id": 51023,               # Reference to expenses collection
+    "from_user_id": 54321,             # Reference to users collection (who owes)
+    "to_user_id": 67890,               # Reference to users collection (who is owed)
+    "amount": "62.75",
+    "currency_code": "USD",            # Can be null (inherits from expense)
+    "last_updated_date": "2025-11-03T14:32:28Z"
+}
+```
+
+**Indexes:**
+- Primary: `_id`
+- Secondary: `expense_id` (for all repayments of an expense)
+- Secondary: `from_user_id` (for debts owed by user)
+- Secondary: `to_user_id` (for debts owed to user)
+- Compound: `(from_user_id, to_user_id)` (for friend balances)
+
+#### 7. `friends` Collection
+
+```python
+{
+    "_id": "friend_54321",
+    "id": 54321,                       # Friend's user ID (references users collection)
+    "first_name": "Bob",
+    "last_name": "Jones",
+    "email": "bob@example.com",
+    "picture": {"medium": "https://..."},
+    "updated_at": "2025-11-01T08:00:00Z",
+    "group_ids": [12345, 67890],       # References to groups collection (shared groups)
+    "last_updated_date": "2025-11-03T14:32:28Z"
+}
+```
+
+**Indexes:**
+- Primary: `_id`
+- Secondary: `id` (unique)
+- Secondary: `email`
+- Secondary: `group_ids` (multi-key for "friends in group" queries)
+
+#### 8. `friend_balances` Collection
+
+**Each currency balance between current user and friend as separate document:**
+
+```python
+{
+    "_id": "friend_54321_balance_USD",
+    "friend_id": 54321,                # Reference to friends/users collection
+    "currency_code": "USD",
+    "amount": "45.50",                 # Positive = friend owes you, Negative = you owe friend
+    "last_updated_date": "2025-11-03T14:32:28Z"
+}
+```
+
+**Indexes:**
+- Primary: `_id`
+- Secondary: `friend_id`
+- Compound: `(friend_id, currency_code)` (unique constraint)
+
+#### 9. `notifications` Collection
 
 ```python
 {
@@ -604,7 +1341,7 @@ if await is_entity_cache_valid("notifications", notification["last_updated_date"
     "id": 32514315,
     "type": 0,                         # 0=expense added, 1=expense updated, etc.
     "created_at": "2025-11-03T13:45:00Z",
-    "created_by": 67890,
+    "created_by_user_id": 67890,       # Reference to users collection
     "source": {
         "type": "Expense",
         "id": 51023,
@@ -621,22 +1358,28 @@ if await is_entity_cache_valid("notifications", notification["last_updated_date"
 - Secondary: `created_at` (descending, for latest-first queries)
 - Secondary: `type` (for filtering by notification type)
 
-#### 8. `categories` Collection
+#### 10. `categories` Collection
 
 ```python
 {
     "_id": "category_15",
     "id": 15,
     "name": "Groceries",
-    "parent_id": 1,                    # null if top-level category
+    "parent_id": 1,                    # Reference to parent category (null if top-level)
     "icon": "https://...",
-    "icon_types": {...},
-    "subcategory_ids": [],             # Empty if leaf category
+    "icon_types": {"slim": {"small": "https://...", "large": "https://..."}},
+    "subcategory_ids": [45, 46, 47],   # References to child categories
     "last_updated_date": "2025-11-03T14:32:28Z"
 }
 ```
 
-#### 9. `currencies` Collection
+**Indexes:**
+- Primary: `_id`
+- Secondary: `id` (unique)
+- Secondary: `parent_id` (for subcategory queries)
+- Secondary: `name` (for name-based lookups)
+
+#### 11. `currencies` Collection
 
 ```python
 {
@@ -647,17 +1390,36 @@ if await is_entity_cache_valid("notifications", notification["last_updated_date"
 }
 ```
 
-#### 10. `comments` Collection
+**Indexes:**
+- Primary: `_id`
+- Secondary: `currency_code` (unique)
+
+#### 12. `comments` Collection
+
+**Each comment as separate document:**
 
 ```python
 {
     "_id": "comment_79800950",
     "id": 79800950,
-    "expense_id": 51023,               # Relation ID
+    "expense_id": 51023,               # Reference to expenses collection
     "content": "Forgot to include milk!",
     "comment_type": "User",            # User | System
+    "relation_type": "ExpenseComment", # Type of relation
+    "relation_id": 51023,              # Same as expense_id
     "created_at": "2025-11-03T09:00:00Z",
     "deleted_at": null,
+    "user_id": 67890,                  # Reference to users collection (who posted)
+    "last_updated_date": "2025-11-03T14:32:28Z"
+}
+```
+
+**Indexes:**
+- Primary: `_id`
+- Secondary: `id` (unique)
+- Secondary: `expense_id` (for all comments on an expense)
+- Secondary: `user_id` (for user's comments)
+- Secondary: `created_at` (for chronological sorting)
     "user_id": 67890,
     "last_updated_date": "2025-11-03T14:32:28Z"
 }
@@ -1564,12 +2326,61 @@ This technical design document outlines a comprehensive caching strategy for the
 - Zero breaking changes to existing MCP tool interfaces
 - Comprehensive testing and monitoring strategy
 
-**Next Steps**:
-1. Review and approve this design document
-2. Begin Phase 1 implementation (Foundation)
-3. Set up MongoDB collections and indexes
-4. Implement entity normalization functions
-5. Add unit tests for cache operations
+---
+
+## Recent Critical Fix: Cache Query Parameters (2025-11-08)
+
+### What Was Fixed
+
+A critical bug in `_build_cache_query()` where filter parameters (date ranges, pagination) were not included in cache keys for `list_expenses`. This caused different API requests to incorrectly share cached data.
+
+### Impact
+
+- **Before Fix ❌**: `list_expenses(dated_after="2025-09-01")` and `list_expenses(dated_after="2025-10-01")` shared the same cache → returned wrong data (2 months instead of 1 month)
+- **After Fix ✅**: Each unique combination of parameters gets its own cache entry → correct data always returned
+
+### Changes Made
+
+**Code Changes**:
+- Updated `app/cached_splitwise_client.py::_build_cache_query()` to include ALL filter parameters in cache keys
+- Added parameters to cache key: `dated_after`, `dated_before`, `updated_after`, `updated_before`, `limit`, `offset`
+
+**Test Coverage**:
+- Added 3 new tests in `tests/test_cached_client.py`:
+  - `test_build_cache_query_list_expenses_with_date_filters` - Verifies date filters in cache key
+  - `test_build_cache_query_list_expenses_with_all_filters` - Verifies all parameters included
+  - `test_build_cache_query_list_expenses_different_date_ranges_different_keys` - Verifies different date ranges create different cache keys
+
+**Documentation**:
+- Added comprehensive "⚠️ CRITICAL: Cache Query Parameters" section (see above)
+- Analyzed all 10 entity types for cache correctness
+- Documented the bug scenario with before/after examples
+- Added testing recommendations
+
+### Verification
+
+All 151 tests pass including:
+- 44 cached client tests (3 new tests for this fix)
+- 16 integration tests  
+- All existing unit tests
+
+### Key Takeaway
+
+**Any parameter that affects the API response MUST be included in the cache query.** This is critical for cache correctness. The documentation now includes:
+- Complete analysis of all 10 entity types
+- Examples of correct vs incorrect cache key construction
+- Testing recommendations to prevent similar bugs
+
+---
+
+## Next Steps
+
+1. ✅ **COMPLETED**: Review cache query parameter handling for all entity types
+2. ✅ **COMPLETED**: Fix `list_expenses` cache query to include all filter parameters
+3. ✅ **COMPLETED**: Add comprehensive tests for date range and pagination caching
+4. ✅ **COMPLETED**: Document the fix and analysis in this document
+5. **PENDING**: User review of updated documentation
+6. **NEXT**: Begin implementing entity normalization (see "Data Model & Entity Normalization" section)
 
 ---
 

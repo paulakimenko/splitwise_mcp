@@ -201,6 +201,80 @@ class TestCacheQueries:
             query = client._build_cache_query("list_expenses", friend_id=789)
             assert query == {"method": "list_expenses", "friend_id": 789}
 
+    def test_build_cache_query_list_expenses_with_date_filters(self):
+        """Test query building for list_expenses with date range filters."""
+        with patch("app.cached_splitwise_client.SplitwiseClient"):
+            client = CachedSplitwiseClient(api_key="test")
+            query = client._build_cache_query(
+                "list_expenses",
+                dated_after="2025-10-01",
+                dated_before="2025-11-01",
+            )
+            assert query == {
+                "method": "list_expenses",
+                "dated_after": "2025-10-01",
+                "dated_before": "2025-11-01",
+            }
+
+    def test_build_cache_query_list_expenses_with_all_filters(self):
+        """Test query building for list_expenses with all filter parameters.
+
+        This is critical: different filter combinations must produce different cache keys
+        to prevent incorrect data from being returned.
+        """
+        with patch("app.cached_splitwise_client.SplitwiseClient"):
+            client = CachedSplitwiseClient(api_key="test")
+            query = client._build_cache_query(
+                "list_expenses",
+                group_id=123,
+                dated_after="2025-10-01",
+                dated_before="2025-11-01",
+                updated_after="2025-10-15",
+                updated_before="2025-10-20",
+                limit=50,
+                offset=100,
+            )
+            assert query == {
+                "method": "list_expenses",
+                "group_id": 123,
+                "dated_after": "2025-10-01",
+                "dated_before": "2025-11-01",
+                "updated_after": "2025-10-15",
+                "updated_before": "2025-10-20",
+                "limit": 50,
+                "offset": 100,
+            }
+
+    def test_build_cache_query_list_expenses_different_date_ranges_different_keys(
+        self,
+    ):
+        """Test that different date ranges produce different cache keys.
+
+        This was the original bug: two requests with different date ranges
+        would share the same cache key, causing incorrect data to be returned.
+        """
+        with patch("app.cached_splitwise_client.SplitwiseClient"):
+            client = CachedSplitwiseClient(api_key="test")
+
+            # Request for 2 months
+            query1 = client._build_cache_query(
+                "list_expenses",
+                dated_after="2025-09-01",
+                dated_before="2025-11-01",
+            )
+
+            # Request for 1 month
+            query2 = client._build_cache_query(
+                "list_expenses",
+                dated_after="2025-10-01",
+                dated_before="2025-11-01",
+            )
+
+            # Must be different keys
+            assert query1 != query2
+            assert query1["dated_after"] == "2025-09-01"
+            assert query2["dated_after"] == "2025-10-01"
+
     def test_build_cache_query_get_expense(self):
         """Test query building for get_expense method."""
         with patch("app.cached_splitwise_client.SplitwiseClient"):
