@@ -69,11 +69,11 @@ class SplitwiseMCPTester:
     ) -> dict[str, Any]:
         """
         Call an MCP tool using JSON-RPC protocol.
-        
+
         Args:
             tool_name: Name of the tool to call
             arguments: Tool arguments (optional)
-            
+
         Returns:
             Tool response data
         """
@@ -293,6 +293,7 @@ async def main():
             print(f"   ❌ list_groups FAILED: {e}")
 
         # Test 3: list_expenses
+        expenses_data = None  # Initialize to prevent NameError if test fails
         try:
             expenses_data = await tester.test_list_expenses()
             passed += 1

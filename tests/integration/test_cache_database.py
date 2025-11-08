@@ -2,6 +2,9 @@
 
 These tests verify that cached data in MongoDB matches the request parameters
 and that the cache requirements from CACHED_SPLITWISE_CLIENT.md are met.
+
+Note: This test module uses the test_group_id fixture from conftest.py,
+which creates a temporary test group for testing and cleans it up afterwards.
 """
 
 from __future__ import annotations

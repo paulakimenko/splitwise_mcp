@@ -507,9 +507,8 @@ make check-splitwise
 
 **Configuration:**
 ```bash
-# Set custom server URL and link ID
-export SPLITWISE_MCP_BASE_URL='https://sw-mcp.paulakimenko.xyz'
-export SPLITWISE_LINK_ID='link_690ced8984fc8191a01dd2b438e8a640'
+# Set custom server URL
+export SPLITWISE_MCP_URL='https://sw-mcp.paulakimenko.xyz'
 make check-splitwise
 ```
 

@@ -59,8 +59,7 @@ python scripts/test_mcp_manual.py
 python scripts/test_splitwise_integration.py
 
 # Or with custom configuration
-export SPLITWISE_MCP_BASE_URL='https://sw-mcp.paulakimenko.xyz'
-export SPLITWISE_LINK_ID='link_690ced8984fc8191a01dd2b438e8a640'
+export SPLITWISE_MCP_URL='https://sw-mcp.paulakimenko.xyz'
 python scripts/test_splitwise_integration.py
 
 # Or with uv (recommended)
@@ -70,8 +69,7 @@ uv run scripts/test_splitwise_integration.py
 **Requirements**: Python with httpx and asyncio support, remote MCP server running
 
 **Configuration**:
-- `SPLITWISE_MCP_BASE_URL`: Base URL of the MCP server (default: https://sw-mcp.paulakimenko.xyz)
-- `SPLITWISE_LINK_ID`: Your MCP connector link ID (default: link_690ced8984fc8191a01dd2b438e8a640)
+- `SPLITWISE_MCP_URL`: Base URL of the MCP server (default: https://sw-mcp.paulakimenko.xyz)
 
 **What it tests**:
 1. ✅ Basic connectivity and authentication (get_current_user)
@@ -95,8 +93,7 @@ uv run scripts/test_splitwise_integration.py
 ### Remote MCP Connector Testing
 1. **Configure credentials** (if not using defaults):
    ```bash
-   export SPLITWISE_MCP_BASE_URL='https://your-mcp-server.com'
-   export SPLITWISE_LINK_ID='your_link_id_here'
+   export SPLITWISE_MCP_URL='https://your-mcp-server.com'
    ```
 2. **Run integration tests**: `python scripts/test_splitwise_integration.py`
 3. **Review results**: Check the test summary for any failures
