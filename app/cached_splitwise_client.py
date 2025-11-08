@@ -303,12 +303,16 @@ class CachedSplitwiseClient:
 
         Implements fallback mechanism: if API call fails for READ methods,
         returns stale cached data if available to maintain service availability.
+
+        CRITICAL: Always returns the same data type (Splitwise SDK objects) regardless
+        of cache hit/miss to maintain consistent behavior for callers.
         """
         # Check cache for READ methods
         if method_name in self.METHOD_TO_ENTITY_MAP:
             cached_data = self._get_from_cache(method_name, **kwargs)
             if cached_data is not None:
                 log_operation(method_name, "CACHE_HIT", kwargs, {"cached": True})
+                # Return cached dict directly (already converted)
                 return cached_data
 
         # Cache miss or WRITE method - call API
@@ -320,6 +324,8 @@ class CachedSplitwiseClient:
                 response_data = self._client.convert(result)
                 self._save_to_cache(method_name, response_data, **kwargs)
                 log_operation(method_name, "CACHE_MISS", kwargs, {"cached": False})
+                # Return converted dict for consistency with cache hits
+                return response_data
             else:
                 # For WRITE methods, invalidate affected cache entries
                 self._invalidate_cache_for_write(method_name, **kwargs)
