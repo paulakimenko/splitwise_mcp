@@ -565,7 +565,7 @@ async def list_expenses(
     offset: int = 0,
 ) -> dict[str, Any]:
     """List expenses with optional filters."""
-    params = {"limit": limit, "offset": offset}
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
     if group_id is not None:
         params["group_id"] = group_id
     if friend_id is not None:

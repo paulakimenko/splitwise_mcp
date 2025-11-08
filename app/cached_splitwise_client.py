@@ -198,19 +198,43 @@ class CachedSplitwiseClient:
     def _build_cache_query(
         self, method_name: str, **kwargs: Any
     ) -> dict[str, Any] | None:
-        """Build MongoDB query for cache lookup based on method and parameters."""
+        """Build MongoDB query for cache lookup based on method and parameters.
+
+        CRITICAL: All filter parameters that affect the API response MUST be included
+        in the cache query. Otherwise, different queries will incorrectly share the same
+        cached data, leading to incorrect results.
+
+        For example:
+        - list_expenses(dated_after="2025-10-01") and list_expenses(dated_after="2025-09-01")
+          must have separate cache entries, not share the same cache.
+        """
         # For list methods without parameters, use a simple query
         if method_name == "list_groups":
             return {"method": method_name}
         elif method_name == "get_group" and "id" in kwargs:
             return {"method": method_name, "group_id": kwargs["id"]}
         elif method_name == "list_expenses":
-            # For expenses, cache separately by group_id or friend_id
+            # CRITICAL: Include ALL filter parameters that affect the response
+            # Without this, different date ranges/limits would share the same cache
             query = {"method": method_name}
             if "group_id" in kwargs:
                 query["group_id"] = kwargs["group_id"]
             if "friend_id" in kwargs:
                 query["friend_id"] = kwargs["friend_id"]
+            # Date range filters - MUST be included in cache key
+            if "dated_after" in kwargs:
+                query["dated_after"] = kwargs["dated_after"]
+            if "dated_before" in kwargs:
+                query["dated_before"] = kwargs["dated_before"]
+            if "updated_after" in kwargs:
+                query["updated_after"] = kwargs["updated_after"]
+            if "updated_before" in kwargs:
+                query["updated_before"] = kwargs["updated_before"]
+            # Pagination parameters - MUST be included in cache key
+            if "limit" in kwargs:
+                query["limit"] = kwargs["limit"]
+            if "offset" in kwargs:
+                query["offset"] = kwargs["offset"]
             return query
         elif method_name == "get_expense" and "id" in kwargs:
             return {"method": method_name, "expense_id": kwargs["id"]}

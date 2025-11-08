@@ -33,7 +33,8 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 # Force flush to ensure logs appear immediately
-handler.flush = lambda: sys.stdout.flush()
+# Type ignore because we're monkey-patching the handler's flush method
+handler.flush = lambda: sys.stdout.flush()  # type: ignore[method-assign]
 
 # PII field patterns to mask
 PII_FIELDS = {

@@ -107,7 +107,7 @@ async def monthly_report(
         # Cost may be string; convert to float if possible
         cost_str = exp.get("cost") or exp.get("amount")
         try:
-            cost = float(cost_str)
+            cost = float(cost_str) if cost_str is not None else 0.0
         except Exception:
             cost = 0.0
         total_cost += cost

@@ -46,11 +46,58 @@ python scripts/test_mcp_docker.py
 python scripts/test_mcp_manual.py
 ```
 
+### `test_splitwise_integration.py`
+**Purpose**: Comprehensive Splitwise MCP connector integration testing
+- Validates remote MCP connector endpoints
+- Tests get_current_user, list_groups, list_expenses
+- Validates search and fetch tools (required for ChatGPT connectors)
+- Provides detailed error diagnostics and troubleshooting guidance
+
+**Usage**:
+```bash
+# From project root
+python scripts/test_splitwise_integration.py
+
+# Or with custom configuration
+export SPLITWISE_MCP_URL='https://sw-mcp.paulakimenko.xyz'
+python scripts/test_splitwise_integration.py
+
+# Or with uv (recommended)
+uv run scripts/test_splitwise_integration.py
+```
+
+**Requirements**: Python with httpx and asyncio support, remote MCP server running
+
+**Configuration**:
+- `SPLITWISE_MCP_URL`: Base URL of the MCP server (default: https://sw-mcp.paulakimenko.xyz)
+
+**What it tests**:
+1. ✅ Basic connectivity and authentication (get_current_user)
+2. ✅ Group enumeration (list_groups)
+3. ✅ Expense listing with parameters (list_expenses)
+4. ✅ Search tool functionality (ChatGPT connector requirement)
+5. ✅ Fetch tool functionality (ChatGPT connector requirement)
+
+**Troubleshooting**: The script provides detailed diagnostics when tests fail:
+- 400 Bad Request → Check authentication token, base URL, JSON formatting
+- Connection errors → Verify server is running and accessible
+- Missing endpoints → May need to implement search/fetch tools for ChatGPT
+
 ## Testing Workflow
 
+### Local Development Testing
 1. **Start Docker Services**: `./scripts/test_docker_mcp.sh`
 2. **Manual Testing**: `python scripts/test_mcp_docker.py`
 3. **Stop Services**: `docker-compose down`
+
+### Remote MCP Connector Testing
+1. **Configure credentials** (if not using defaults):
+   ```bash
+   export SPLITWISE_MCP_URL='https://your-mcp-server.com'
+   ```
+2. **Run integration tests**: `python scripts/test_splitwise_integration.py`
+3. **Review results**: Check the test summary for any failures
+4. **Troubleshoot**: Follow the detailed diagnostics if tests fail
 
 ## Access Points
 
