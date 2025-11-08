@@ -76,10 +76,10 @@ async def _call_splitwise_resource(
     client = ctx.request_context.lifespan_context["client"]
 
     try:
-        result = await asyncio.to_thread(
+        # call_mapped_method now returns already-converted dicts (not SDK objects)
+        response_data = await asyncio.to_thread(
             client.call_mapped_method, method_name, **kwargs
         )
-        response_data = client.convert(result)
 
         logger.info(
             f"RESOURCE SUCCESS: {method_name} returned {type(response_data).__name__}"
@@ -110,10 +110,10 @@ async def _call_splitwise_tool(
     client = ctx.request_context.lifespan_context["client"]
 
     try:
-        result = await asyncio.to_thread(
+        # call_mapped_method now returns already-converted dicts (not SDK objects)
+        response_data = await asyncio.to_thread(
             client.call_mapped_method, method_name, **kwargs
         )
-        response_data = client.convert(result)
 
         # Ensure response is always a dictionary for MCP tool compatibility
         if not isinstance(response_data, dict):
@@ -170,9 +170,11 @@ async def group_resource(group_id: str, ctx: Context) -> str:
         client = ctx.request_context.lifespan_context["client"]
         # URL decode the name in case it contains special characters
         decoded_name = unquote(group_id)
+        # get_group_by_name calls SDK directly, returns raw SDK object (not cached)
         group = client.get_group_by_name(decoded_name)
         if group is None:
             raise ValueError(f"Group not found: {decoded_name}") from None
+        # Convert the SDK object to dict since get_group_by_name bypasses cache
         response_data = client.convert(group)
 
         return json.dumps(response_data)
@@ -244,11 +246,10 @@ async def search(query: str, ctx: Context) -> dict[str, Any]:
     results = []
 
     try:
-        # Search in groups
-        groups_data = await asyncio.to_thread(
+        # Search in groups (call_mapped_method now returns dicts)
+        groups = await asyncio.to_thread(
             client.call_mapped_method, const.METHOD_LIST_GROUPS
         )
-        groups = client.convert(groups_data)
         if isinstance(groups, list):
             for group in groups:
                 if query.lower() in str(group.get("name", "")).lower():
@@ -260,11 +261,10 @@ async def search(query: str, ctx: Context) -> dict[str, Any]:
                         }
                     )
 
-        # Search in expenses
-        expenses_data = await asyncio.to_thread(
+        # Search in expenses (call_mapped_method now returns dicts)
+        expenses = await asyncio.to_thread(
             client.call_mapped_method, const.METHOD_LIST_EXPENSES, limit=100
         )
-        expenses = client.convert(expenses_data)
         if isinstance(expenses, list):
             for expense in expenses:
                 desc = str(expense.get("description", ""))
@@ -277,11 +277,10 @@ async def search(query: str, ctx: Context) -> dict[str, Any]:
                         }
                     )
 
-        # Search in friends
-        friends_data = await asyncio.to_thread(
+        # Search in friends (call_mapped_method now returns dicts)
+        friends = await asyncio.to_thread(
             client.call_mapped_method, const.METHOD_LIST_FRIENDS
         )
-        friends = client.convert(friends_data)
         if isinstance(friends, list):
             for friend in friends:
                 name = f"{friend.get('first_name', '')} {friend.get('last_name', '')}".strip()
@@ -322,10 +321,10 @@ async def fetch(id: str, ctx: Context) -> dict[str, Any]:
         # Parse the ID to determine type and actual ID
         if id.startswith("group_"):
             actual_id = int(id.replace("group_", ""))
-            data = await asyncio.to_thread(
+            # call_mapped_method now returns dicts
+            result_data = await asyncio.to_thread(
                 client.call_mapped_method, const.METHOD_GET_GROUP, id=actual_id
             )
-            result_data = client.convert(data)
 
             result = {
                 "id": id,
@@ -340,10 +339,10 @@ async def fetch(id: str, ctx: Context) -> dict[str, Any]:
 
         elif id.startswith("expense_"):
             actual_id = int(id.replace("expense_", ""))
-            data = await asyncio.to_thread(
+            # call_mapped_method now returns dicts
+            result_data = await asyncio.to_thread(
                 client.call_mapped_method, const.METHOD_GET_EXPENSE, id=actual_id
             )
-            result_data = client.convert(data)
 
             result = {
                 "id": id,
@@ -359,10 +358,10 @@ async def fetch(id: str, ctx: Context) -> dict[str, Any]:
 
         elif id.startswith("friend_"):
             actual_id = int(id.replace("friend_", ""))
-            data = await asyncio.to_thread(
+            # call_mapped_method now returns dicts
+            result_data = await asyncio.to_thread(
                 client.call_mapped_method, const.METHOD_GET_FRIEND, id=actual_id
             )
-            result_data = client.convert(data)
 
             name = f"{result_data.get('first_name', '')} {result_data.get('last_name', '')}".strip()
             result = {

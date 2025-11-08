@@ -467,8 +467,8 @@ class TestCallMappedMethod:
             mock_client.call_mapped_method.assert_called_once_with("list_groups")
             # Should save to cache
             mock_save.assert_called_once_with("list_groups", converted_data)
-            # Should return API result
-            assert result == api_response
+            # Should return converted data (not raw SDK objects) for consistency
+            assert result == converted_data
 
     def test_call_mapped_method_write_operation(self):
         """Test that write operations invalidate cache."""
