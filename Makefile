@@ -117,6 +117,11 @@ test-mcp-call: ## Call specific MCP tool (usage: make test-mcp-call TOOL=get_cur
 	echo "Calling MCP tool: $$TOOL with args: $$ARGS" && \
 	.venv/bin/python scripts/test_mcp_manual.py call $$TOOL --args "$$ARGS"
 
+check-splitwise: ## Verify Splitwise MCP connector functionality (remote testing)
+	@echo "🔍 Checking Splitwise MCP connector integration..."
+	@if [ -f .env ]; then set -o allexport; source .env; set +o allexport; fi && \
+	.venv/bin/python scripts/test_splitwise_integration.py
+
 test-all-local: ## Run unit tests and integration tests
 	$(MAKE) unit-test
 	$(MAKE) integration-test

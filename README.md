@@ -489,6 +489,42 @@ make unit-test
 make integration-test
 ```
 
+### Remote Integration Testing
+
+Test your deployed MCP connector with comprehensive integration checks:
+
+```bash
+# Quick command to verify remote MCP server
+make check-splitwise
+```
+
+**What it tests:**
+- ✅ Basic connectivity and authentication (`get_current_user`)
+- ✅ Group enumeration (`list_groups`)
+- ✅ Expense listing with parameters (`list_expenses`)
+- ✅ Search tool (ChatGPT connector requirement)
+- ✅ Fetch tool (ChatGPT connector requirement)
+
+**Configuration:**
+```bash
+# Set custom server URL and link ID
+export SPLITWISE_MCP_BASE_URL='https://sw-mcp.paulakimenko.xyz'
+export SPLITWISE_LINK_ID='link_690ced8984fc8191a01dd2b438e8a640'
+make check-splitwise
+```
+
+**Documentation:**
+- 📚 [Quick Start Guide](QUICK_START.md) - Get started in 30 seconds
+- 📖 [Integration Test Guide](INTEGRATION_TEST_GUIDE.md) - Comprehensive testing guide
+- 📋 [Quick Reference](CHECK_SPLITWISE_REFERENCE.md) - Command reference card
+- 🏗️ [Architecture Diagram](ARCHITECTURE_DIAGRAM.md) - System architecture and flow
+
+**When to use:**
+- Before deploying changes to verify functionality
+- After configuration updates to validate settings
+- Debugging remote connector issues
+- CI/CD automated validation
+
 ### Code Quality Standards
 
 - **Ruff**: Modern linter and formatter (replaces Black, isort, flake8)  
