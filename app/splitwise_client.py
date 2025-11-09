@@ -107,8 +107,8 @@ class SplitwiseClient:
         Returns
         -------
         Any
-            The result of the SDK call.  Complex objects are returned
-            as-is; callers should convert them via `object_to_dict`.
+            The result of the SDK call, automatically converted to dict/list
+            using object_to_dict for JSON serialization.
         """
         sdk_name = self.METHOD_MAP.get(method_name)
         if not sdk_name:
@@ -117,7 +117,8 @@ class SplitwiseClient:
         if not func:
             raise AttributeError(f"Splitwise SDK has no method '{sdk_name}'")
         result = func(**kwargs)
-        return result
+        # Automatically convert SDK objects to dicts for JSON serialization
+        return self.convert(result)
 
     # Specific helper methods
 
