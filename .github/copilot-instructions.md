@@ -54,14 +54,13 @@ METHOD_MAP = {
 MCP Client → [nginx:80] → [FastMCP:8000] → SplitwiseClient → Splitwise API
                 ↓              ↓                                      ↓
            405 on GET    Async Wrapper                          SDK (sync)
-                          ↓                                          ↓
-                    MongoDB (graceful)                      object_to_dict()
+                                                                      ↓
+                                                            object_to_dict()
 ```
 
 **`app/main.py`** - Entry point with transport detection, no FastAPI (pure MCP)
 **`app/splitwise_client.py`** - METHOD_MAP bridge + SDK wrapper + helper methods (`get_group_by_name`, etc.)
 **`app/custom_methods.py`** - Business logic: `expenses_by_month`, `monthly_report` (async, takes SplitwiseClient)
-**`app/db.py`** - MongoDB ops with graceful failure: `insert_document`, `find_latest`, `find_all`
 **`app/utils.py`** - `object_to_dict()` for SDK→JSON, `month_range()` for date filtering
 
 ### MCP Tool/Resource Pattern
@@ -71,7 +70,6 @@ async def _call_splitwise_tool(ctx: Context, method_name: str, **kwargs) -> dict
     client = ctx.request_context.lifespan_context["client"]  # From lifespan mgmt
     result = await asyncio.to_thread(client.call_mapped_method, method_name, **kwargs)  # Async wrapper
     response_data = client.convert(result)  # SDK objects → dict
-    insert_document(method_name, {"response": response_data})  # Persist (graceful)
     log_operation(method_name, "TOOL_CALL", kwargs, response_data)  # Audit trail
     return response_data
 
@@ -86,8 +84,6 @@ async def create_expense(cost: str, description: str, ctx: Context, **kwargs) ->
 ### Environment Setup
 Required environment variables:
 - `SPLITWISE_API_KEY` - Personal API token from Splitwise
-- `MONGO_URI` - MongoDB connection (defaults to `mongodb://localhost:27017`)
-- `DB_NAME` - Database name (defaults to `splitwise`)
 
 **MCP Transport Configuration** (for remote operation):
 - `MCP_TRANSPORT` - Transport mode: `stdio` (default) or `streamable-http` for remote access
@@ -149,7 +145,7 @@ python -m app.main  # Pure MCP server via stdio
 ```
 
 ### Docker Development
-Use `docker-compose.yml` for full stack with MongoDB and Streamable HTTP transport:
+Use `docker-compose.yml` for deployment with Streamable HTTP transport:
 ```bash
 docker-compose up --build
 ```
@@ -176,7 +172,7 @@ docker-compose up --build
 ### Test Architecture
 The project includes comprehensive testing at multiple levels:
 
-- **Unit Tests** (`tests/`) - Mock-based testing of all modules (76 tests)
+- **Unit Tests** (`tests/`) - Mock-based testing of all modules (82 tests)
 - **Integration Tests** (`tests/integration/`) - End-to-end tests against live Splitwise API
 - **MCP Server Tests** (`tests/test_mcp_pure.py`) - Comprehensive MCP tool and resource testing
 - **Test Coverage** - Comprehensive coverage reporting with pytest-cov
@@ -211,7 +207,7 @@ Integration tests create a temporary test group in your Splitwise account:
 ### Development Tools
 - **MCP Inspector**: `uv run mcp dev app.main` for interactive testing
 - **Stdio Communication**: Direct MCP protocol via stdin/stdout
-- **Database Logging**: All operations logged to MongoDB with timestamps
+- **Operation Logging**: All operations logged for debugging and audit trail
 - **Error Patterns**: MCP protocol errors, SDK validation errors, Splitwise API errors
 
 ### CI/CD Pipeline
@@ -282,7 +278,6 @@ class TestClassName:
 # Combined context managers with parentheses (not nested with)
 with (
     patch("app.main.asyncio.to_thread") as mock_to_thread,
-    patch("app.main.insert_document"),
     patch("app.main.log_operation"),
 ):
     # Test implementation
@@ -304,7 +299,6 @@ async def test_mcp_tool(mock_context):
     
     with (
         patch("app.main.asyncio.to_thread") as mock_to_thread,
-        patch("app.main.insert_document"),
         patch("app.main.log_operation"),
     ):
         result = await my_tool("test_param", mock_context)
@@ -340,20 +334,6 @@ async def mcp_lifespan(server: Server):
     # Cleanup code if needed
 ```
 
-### Database Patterns
-**MongoDB Operations:**
-```python
-# Always add timestamps to documents
-document = {**document, "timestamp": datetime.now(UTC)}
-result = db[collection].insert_one(document)
-
-# Consistent query patterns
-def find_latest(collection: str) -> dict[str, Any] | None:
-    """Return most recent document by timestamp."""
-    db = get_db()
-    return db[collection].find_one(sort=[("timestamp", -1)])
-```
-
 ### Pydantic Model Patterns
 ```python
 class RequestModel(BaseModel):
@@ -383,7 +363,6 @@ client: SplitwiseClient = request.app.state.client
 - `app/models.py` - Pydantic schemas only  
 - `app/splitwise_client.py` - SDK wrapper and method mapping
 - `app/custom_methods.py` - Business logic functions (async)
-- `app/db.py` - Database utilities (sync functions)
 - `app/utils.py` - Pure utility functions
 - `app/logging_utils.py` - Logging helpers
 
@@ -401,7 +380,6 @@ from pydantic import BaseModel
 
 # Local imports
 from . import custom_methods
-from .db import find_latest, insert_document
 from .models import RequestModel
 ```
 
