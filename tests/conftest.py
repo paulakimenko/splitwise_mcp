@@ -1,10 +1,9 @@
 """Test configuration and fixtures."""
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
-from app.cached_splitwise_client import CachedSplitwiseClient
 from app.splitwise_client import SplitwiseClient
 
 
@@ -47,34 +46,6 @@ def mock_splitwise_client(mock_splitwise_sdk):
         mock_splitwise_class.return_value = mock_splitwise_sdk
         client = SplitwiseClient(api_key="test_key")
         return client
-
-
-@pytest.fixture
-def mock_cached_splitwise_client(mock_splitwise_sdk, mock_db):
-    """Mock CachedSplitwiseClient with mocked SDK and disabled cache."""
-    with (
-        patch("app.splitwise_client.Splitwise") as mock_splitwise_class,
-        patch("app.cached_splitwise_client.get_db") as mock_get_db,
-        patch.dict("os.environ", {"CACHE_ENABLED": "false"}),
-    ):
-        mock_splitwise_class.return_value = mock_splitwise_sdk
-        mock_get_db.return_value = mock_db
-        client = CachedSplitwiseClient(api_key="test_key")
-        return client
-
-
-@pytest.fixture
-def mock_db():
-    """Mock MongoDB operations."""
-    mock_db_client = MagicMock()
-    mock_collection = Mock()
-    mock_db_client.__getitem__.return_value = mock_collection
-
-    with patch("app.db.get_client") as mock_get_client:
-        mock_get_client.return_value = Mock()
-        with patch("app.db.get_db") as mock_get_db:
-            mock_get_db.return_value = mock_db_client
-            yield mock_db_client
 
 
 @pytest.fixture

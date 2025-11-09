@@ -6,7 +6,7 @@ This directory contains utility scripts for testing and managing the Splitwise M
 
 ### `test_docker_mcp.sh`
 **Purpose**: Automated Docker testing workflow
-- Starts Docker Compose services (MongoDB + MCP Server)
+- Starts Docker Compose services (MCP Server)
 - Waits for services to be ready
 - Runs comprehensive functionality tests
 - Provides access URLs and next steps
@@ -106,4 +106,3 @@ When services are running:
 - **API Documentation**: http://localhost:8000/docs
 - **MCP Tools**: http://localhost:8000/mcp-test/list-tools
 - **Health Check**: http://localhost:8000/health
-- **MongoDB**: mongodb://localhost:27017

@@ -1,15 +1,9 @@
-"""Custom helper endpoints built atop Splitwise and the local database.
+"""Custom helper endpoints built atop the Splitwise API.
 
 These functions encapsulate higher-level behaviours described by the
-user, such as splitting an expense evenly, filtering expenses by
-month, and generating simple reports.  Each helper function receives
-a `SplitwiseClient` instance and interacts with the database via
-functions from `app.db`.
-
-Many of these operations are read-only and operate on cached data
-stored in MongoDB.  When interacting with the Splitwise API
-directly (e.g. to create or update an expense) we call methods on
-the provided client.
+user, such as filtering expenses by month and generating simple reports.
+Each helper function receives a `SplitwiseClient` instance and calls
+methods on the provided client to interact with the Splitwise API directly.
 """
 
 from __future__ import annotations
@@ -19,7 +13,6 @@ from typing import TYPE_CHECKING, Any
 
 from dateutil import parser as date_parser  # type: ignore
 
-from .db import find_all
 from .utils import month_range
 
 if TYPE_CHECKING:
@@ -53,33 +46,38 @@ async def expenses_by_month(
 
     if group_id is None:
         raise ValueError(f"Group '{group_name}' does not have an ID")
-    # Fetch all cached expense lists
-    docs = find_all("list_expenses")
+
+    # Fetch expenses from Splitwise API for the specified group and date range
+    expenses = client.call_mapped_method(
+        "list_expenses",
+        group_id=group_id,
+        dated_after=start.isoformat(),
+        dated_before=end.isoformat(),
+    )
+
+    # Convert SDK objects to dictionaries
+    expenses_data = client.convert(expenses)
+
+    # Filter and validate expenses
     results: list[dict[str, Any]] = []
-    for doc in docs:
-        expenses = doc.get("response") or doc.get("data")
-        if not expenses:
-            continue
-        for exp in expenses:
-            try:
-                if exp.get("group_id") != group_id:
-                    continue
-                # Some expense objects may have `date` or `created_at`
-                date_str = (
-                    exp.get("date")
-                    or exp.get("created_at")
-                    or exp.get("created_at_object")
-                )
-                if not date_str:
-                    continue
-                date_obj = date_parser.parse(date_str)
-                # Convert to naive datetime for comparison if timezone-aware
-                if date_obj.tzinfo is not None:
-                    date_obj = date_obj.replace(tzinfo=None)
-                if start <= date_obj < end:
-                    results.append(exp)
-            except Exception:
+    for exp in expenses_data:
+        try:
+            if exp.get("group_id") != group_id:
                 continue
+            # Some expense objects may have `date` or `created_at`
+            date_str = (
+                exp.get("date") or exp.get("created_at") or exp.get("created_at_object")
+            )
+            if not date_str:
+                continue
+            date_obj = date_parser.parse(date_str)
+            # Convert to naive datetime for comparison if timezone-aware
+            if date_obj.tzinfo is not None:
+                date_obj = date_obj.replace(tzinfo=None)
+            if start <= date_obj < end:
+                results.append(exp)
+        except Exception:
+            continue
     return results
 
 
@@ -88,9 +86,9 @@ async def monthly_report(
 ) -> dict[str, Any]:
     """Generate a simple report of expenses by category for a month.
 
-    This report reads cached expenses from the database, groups them
+    This report fetches expenses from the Splitwise API, groups them
     by their `category_id` (and optionally `category_name`), sums
-    their costs and returns a summary.  It also emits rudimentary
+    their costs and returns a summary. It also emits rudimentary
     recommendations, for example highlighting categories with
     unusually high spend.
     """

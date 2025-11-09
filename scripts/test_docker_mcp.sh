@@ -12,7 +12,7 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 # Start services
-echo "📦 Starting MongoDB and MCP Server..."
+echo "📦 Starting MCP Server..."
 docker-compose up -d
 
 # Wait for services to be ready

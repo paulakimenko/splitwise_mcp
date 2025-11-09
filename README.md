@@ -3,9 +3,8 @@
 This repository contains a **Model Context Protocol (MCP)** server for the
 Splitwise API. The goal of this project is to provide a pure MCP SDK implementation
 that exposes all Splitwise API methods as MCP tools and resources for AI agents,
-while persisting data into a MongoDB database and logging every operation.
-Additionally, we provide MCP prompts for higher-level workflows such as expense
-management and financial reporting.
+with comprehensive logging of every operation. Additionally, we provide MCP prompts 
+for higher-level workflows such as expense management and financial reporting.
 
 ## Features
 
@@ -17,18 +16,7 @@ management and financial reporting.
 
 * ✅ **Splitwise API Integration** – comprehensive method mapping covering all Splitwise
   operations via the [`splitwise` Python client](https://github.com/namaggarwal/splitwise).
-  Each MCP operation stores data in MongoDB, logs the call, and responds with normalized JSON.
-
-* ✅ **Smart Caching Layer with Fallback** – intelligent MongoDB-based caching with entity-specific TTLs
-  reduces API calls and improves performance. GET operations check cache first (expenses: 5min,
-  groups: 60min, categories: 24h), while write operations auto-invalidate affected caches.
-  When the Splitwise API is unavailable, the system gracefully serves stale cached data for
-  read operations (write operations always fail to maintain data integrity). Cache can be 
-  disabled via environment variable for testing or real-time requirements.
-
-* ✅ **Database Persistence** – all operations are persisted in MongoDB
-  collections named after the API method (e.g. `list_groups`, `create_expense`) with
-  timestamps for caching and audit trails.
+  Each MCP operation logs the call and responds with normalized JSON.
 
 * ✅ **Privacy-Compliant Logging** – standard Python logging to stdout with automatic
   PII masking. User names and emails are masked before logging ("john@example.com" → 
@@ -36,18 +24,17 @@ management and financial reporting.
   for observability while maintaining privacy compliance.
 
 * ✅ **MCP Resources for Read Operations** – GET operations are exposed as MCP resources
-  using the `splitwise://` URI scheme. Resources support caching and provide structured
-  access to Splitwise data for AI agents.
+  using the `splitwise://` URI scheme. Resources provide structured access to Splitwise 
+  data for AI agents.
 
 * ✅ **MCP Tools for Write Operations** – POST/PUT/DELETE operations are exposed as MCP tools
-  that modify Splitwise data and update the local cache. Tools include parameter validation
-  and error handling.
+  that modify Splitwise data. Tools include parameter validation and error handling.
 
 * ✅ **MCP Prompts for Workflows** – complex multi-step operations like expense reporting,
   debt optimization, and group management are available as MCP prompts that guide AI agents
   through structured workflows.
 
-* ✅ **Dockerized** – single-service Docker container with MongoDB integration.
+* ✅ **Dockerized** – single-service Docker container.
   Pre-built image available on Docker Hub (`paulakimenko/splitwise-mcp:latest`).
   Includes health checks and graceful database connection handling.
 
@@ -103,7 +90,7 @@ python -m app.main
 ### Option 3: Docker Development
 
 ```bash
-# Start full stack with MongoDB
+# Start Docker development environment
 make docker-dev
 
 # Or manually with docker-compose
@@ -135,19 +122,9 @@ The service requires minimal environment configuration:
 - `SPLITWISE_API_KEY` - Your Splitwise personal API token (get from [splitwise.com](https://secure.splitwise.com/apps))
 
 **Optional Variables:**
-- `MONGO_URI` - MongoDB connection string (defaults to `mongodb://localhost:27017`, **optional - only used for caching**)
-- `DB_NAME` - Database name (defaults to `splitwise`, **optional - only used for caching**)
 - `MCP_TRANSPORT` - Transport mode: `stdio` (default) or `streamable-http` for remote operation
 - `MCP_HOST` - Host to bind to (defaults to `0.0.0.0` for HTTP transport)
 - `MCP_PORT` - Port for HTTP transport (defaults to `8000`)
-- `CACHE_ENABLED` - Enable/disable caching layer (defaults to `true`)
-- `CACHE_TTL_EXPENSES_MINUTES` - Cache TTL for expenses in minutes (defaults to `5`)
-- `CACHE_TTL_FRIENDS_MINUTES` - Cache TTL for friends in minutes (defaults to `5`)
-- `CACHE_TTL_USERS_MINUTES` - Cache TTL for users in minutes (defaults to `60`)
-- `CACHE_TTL_GROUPS_MINUTES` - Cache TTL for groups in minutes (defaults to `60`)
-- `CACHE_TTL_CATEGORIES_MINUTES` - Cache TTL for categories in minutes (defaults to `1440`)
-- `CACHE_TTL_CURRENCIES_MINUTES` - Cache TTL for currencies in minutes (defaults to `1440`)
-- `CACHE_TTL_NOTIFICATIONS_MINUTES` - Cache TTL for notifications in minutes (defaults to `0` - never cache)
 
 **Logging Configuration:**
 - **Output**: Standard Python logging to stdout (JSON-formatted structured logs)
@@ -157,7 +134,6 @@ The service requires minimal environment configuration:
   - Applies to: first_name, last_name, email fields in all logged data
 - **Format**: `"%(asctime)s - %(name)s - %(levelname)s - %(message)s"`
 - **Level**: INFO (successful operations) or ERROR (failed operations)
-- **No MongoDB Dependency**: Logging works independently of database availability
 
 **MCP Endpoint Configuration:**
 - **Local Development** (stdio): No configuration needed, server runs on stdio transport
@@ -238,34 +214,18 @@ docker-compose up --build
 - `debt_settlement_workflow` - Optimize and settle outstanding balances
 
 **MCP Client Integration:**
-AI agents connect via stdio protocol. The server handles Splitwise authentication, MongoDB persistence, and operation logging automatically. All operations maintain audit trails and cache data locally.
+AI agents connect via stdio protocol. The server handles Splitwise authentication and operation logging automatically.
 
-### Database Integration
+### Logging & Privacy
 
-All MCP operations automatically persist data to MongoDB with intelligent caching:
+All MCP operations are logged to stdout with automatic PII masking:
 
-- **Collections**: Named after operations (`list_groups`, `create_expense`, etc.)
-- **Timestamps**: All documents include creation timestamps for cache validation
-- **Privacy-Compliant Logging**: All operations logged to stdout with automatic PII masking:
+- **Privacy-Compliant Logging**:
   - Emails masked: `"user@example.com"` → `"u***@example.com"`
   - Names masked: `"Alice Smith"` → `"A*** S***"`
   - Structured JSON logs for observability without exposing sensitive data
-  - No dependency on MongoDB (logs to stdout even if database is unavailable)
-- **Smart Caching**: Entity-specific TTLs reduce API calls:
-  - Expenses & Friends: 5 minutes (frequently changing data)
-  - Users & Groups: 60 minutes (moderately stable data)
-  - Categories & Currencies: 24 hours (static data)
-  - Notifications: Never cached (always fresh)
-- **Cache Invalidation**: Write operations automatically invalidate related caches
-  - Creating/updating/deleting expenses invalidates expense cache
-  - Group operations invalidate group and member caches
-  - Friend operations invalidate friend cache
-- **Cache Fallback**: When Splitwise API is unavailable, read operations gracefully
-  serve stale cached data (write operations always fail for data integrity)
-  - Fallback logged with operation type `CACHE_FALLBACK` for observability
-  - API errors logged with operation type `API_ERROR` when no cache available
-- **Graceful Degradation**: Server continues operation if database is unavailable
-- **Cache Control**: Set `CACHE_ENABLED=false` to disable caching entirely
+- **Operation Tracking**: All API calls logged with timestamps and operation types
+- **Error Handling**: API errors logged with detailed context for debugging
 
 ### Example MCP Interactions
 
@@ -285,14 +245,14 @@ mcp call create_group '{"name": "Trip 2025", "group_type": "trip"}'
 
 ## Deployment
 
-The project is designed for containerized deployment as a pure MCP server with **Streamable HTTP transport** for remote access. An example `docker-compose.yml` is provided to run the MCP service alongside MongoDB. The server supports both stdio (local) and HTTP (remote) transports, making it suitable for integration with AI agent platforms and MCP-compatible clients from any machine.
+The project is designed for containerized deployment as a pure MCP server with **Streamable HTTP transport** for remote access. An example `docker-compose.yml` is provided to run the MCP service with nginx reverse proxy. The server supports both stdio (local) and HTTP (remote) transports, making it suitable for integration with AI agent platforms and MCP-compatible clients from any machine.
 
 ### Using Pre-built Docker Image
 
 The service is available as a pre-built Docker image on Docker Hub:
 
 ```bash
-# Pull and run the latest image with MongoDB
+# Pull and run the latest image with docker-compose
 docker-compose up -d
 
 # Or run the MCP server directly
@@ -302,8 +262,7 @@ docker run --env-file .env paulakimenko/splitwise-mcp:latest
 **Available Docker Image:**
 - **Registry**: `paulakimenko/splitwise-mcp:latest`
 - **Base**: Python 3.11 slim
-- **Protocol**: MCP via stdio
-- **Database**: MongoDB integration with graceful fallback
+- **Protocol**: MCP via stdio and Streamable HTTP
 
 ### Custom Deployment Workflow
 
@@ -334,14 +293,12 @@ docker run --env-file .env paulakimenko/splitwise-mcp:latest
    * Set the container image to `paulakimenko/splitwise-mcp:latest` or your custom image.
    * Add environment variables:
      - `SPLITWISE_API_KEY` (required) - Your Splitwise API key
-     - `MONGO_URI` (optional) - MongoDB connection string (defaults to `mongodb://localhost:27017`)
-     - `DB_NAME` (optional) - Database name (defaults to `splitwise`)
      - `MCP_TRANSPORT=streamable-http` (for Docker/remote) - Enables HTTP transport
      - `MCP_HOST=0.0.0.0` (for Docker/remote) - Binds to all interfaces
      - `MCP_PORT=8000` (for Docker/remote) - HTTP server port
    * **Local Access**: Configure MCP client to connect via stdio: `python -m app.main`
    * **Remote Access**: Configure MCP client to connect via HTTP: `http://localhost:8000/mcp`
-   * Use `docker-compose.yml` for pre-configured remote access with MongoDB.
+   * Use `docker-compose.yml` for pre-configured remote access.
 
 3. **Integration with AI Platforms:**
    
@@ -367,27 +324,17 @@ The service follows a pure MCP SDK architecture:
 │ • expenses       │ • delete_*    │ • financial    │
 │ • friends        │ • add_user    │ • debt_settle  │
 ├─────────────────────────────────────────────┤
-│       CachedSplitwiseClient (Wrapper)       │
-│    • Entity-specific TTL caching            │
-│    • Automatic cache invalidation           │
-│    • MongoDB-backed persistence             │
-├─────────────────────────────────────────────┤
 │            Splitwise SDK Client             │
 │         (Comprehensive Method Map)          │
-├─────────────────────────────────────────────┤
-│     MongoDB Persistence & Audit Logging    │
-│      (Graceful Degradation if Offline)     │
 └─────────────────────────────────────────────┘
 ```
 
 **Key Components:**
 - **MCP Server**: Pure FastMCP implementation with dual transport support (stdio/HTTP)
 - **Transport Modes**: stdio for local development, Streamable HTTP for remote access
-- **Resources**: GET operations via `splitwise://` URI scheme with caching
+- **Resources**: GET operations via `splitwise://` URI scheme
 - **Tools**: POST/PUT/DELETE operations with parameter validation  
 - **Prompts**: Complex workflows guiding AI agents through multi-step operations
-- **Caching Layer**: CachedSplitwiseClient wrapper with intelligent TTL management
-- **Database Persistence**: Automatic caching with timestamps (MongoDB optional, only for caching)
 - **Privacy-Compliant Logging**: Standard Python logging to stdout with PII masking
 - **Splitwise Integration**: Complete API coverage with method mapping
 
@@ -473,7 +420,6 @@ The project includes comprehensive testing:
 **Test Breakdown:**
 - Cached Client: 37 tests (initialization, TTL validation, cache operations, invalidation)
 - Custom Methods: 10 tests (expense analysis, reporting workflows)
-- Database: 9 tests (MongoDB operations, connection handling)
 - MCP Server: 14 tests (pure MCP implementation, ChatGPT connector compatibility)
 - Models: 8 tests (Pydantic validation)
 - Splitwise Client: 18 tests (SDK wrapper, method mapping)
@@ -559,9 +505,8 @@ Pull requests are welcome! If you find a bug or want to add additional MCP tools
 
 **Resources (Read Operations):**
 1. Add resource function with `@mcp.resource("splitwise://path")` decorator
-2. Implement caching logic with MongoDB fallback
-3. Add URI pattern to resource documentation
-4. Add integration tests for resource access
+2. Add URI pattern to resource documentation
+3. Add integration tests for resource access
 
 **Prompts (Workflows):**
 1. Add prompt function with `@mcp.prompt()` decorator  

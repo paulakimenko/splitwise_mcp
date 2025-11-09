@@ -57,7 +57,6 @@ class SplitwiseClient:
         const.METHOD_CREATE_FRIENDS: "createFriends",
         const.METHOD_CREATE_COMMENT: "createComment",
         const.METHOD_DELETE_COMMENT: "deleteComment",
-        const.METHOD_GET_BALANCE: "getCurrentUser",  # Not a direct method; see notes
     }
 
     def __init__(

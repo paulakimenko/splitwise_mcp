@@ -20,8 +20,6 @@ def test_mcp_server():
                 "args": ["-m", "app.mcp_server"],
                 "env": {
                     "SPLITWISE_API_KEY": "test_key_123",  # Mock key for testing
-                    "MONGO_URI": "mongodb://localhost:27017",
-                    "DB_NAME": "splitwise_test",
                 },
             }
         }
@@ -87,8 +85,6 @@ def test_direct_mcp_server():
     test_env.update(
         {
             "SPLITWISE_API_KEY": "test_key_123",
-            "MONGO_URI": "mongodb://localhost:27017",
-            "DB_NAME": "splitwise_test",
         }
     )
 
