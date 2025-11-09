@@ -165,8 +165,6 @@ class TestStreamableHTTPTransport:
             "MCP_HOST": "0.0.0.0",
             "MCP_PORT": "8000",
             "SPLITWISE_API_KEY": "test_key",
-            "MONGO_URI": "mongodb://mongo:27017",
-            "DB_NAME": "splitwise",
         }
 
         with (

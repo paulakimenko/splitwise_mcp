@@ -19,8 +19,8 @@ from mcp.types import ToolAnnotations
 
 from . import constants as const
 from . import custom_methods
-from .cached_splitwise_client import CachedSplitwiseClient
 from .logging_utils import log_operation
+from .splitwise_client import SplitwiseClient
 
 
 @asynccontextmanager
@@ -37,11 +37,11 @@ async def mcp_lifespan(_server: FastMCP):
     consumer_secret = os.environ.get(const.ENV_SPLITWISE_CONSUMER_SECRET)
 
     if api_key:
-        logger.info("Initializing with API key authentication")
-        client = CachedSplitwiseClient(api_key=api_key)
+        logging.info("Initializing Splitwise client with API key")
+        client = SplitwiseClient(api_key=api_key)
     elif consumer_key and consumer_secret:
-        logger.info("Initializing with OAuth consumer credentials")
-        client = CachedSplitwiseClient(
+        logging.info("Initializing Splitwise client with OAuth credentials")
+        client = SplitwiseClient(
             consumer_key=consumer_key, consumer_secret=consumer_secret
         )
     else:

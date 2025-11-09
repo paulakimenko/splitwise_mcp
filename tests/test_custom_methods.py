@@ -17,10 +17,7 @@ class TestExpensesByMonth:
         mock_group = Mock()
         mock_group.id = 1
 
-        mock_client = Mock()
-        mock_client.get_group_by_name.return_value = mock_group
-
-        # Setup mock expenses data
+        # Setup mock expenses data returned by API
         expenses_data = [
             {
                 "id": 1,
@@ -45,15 +42,23 @@ class TestExpensesByMonth:
             },
         ]
 
-        with patch("app.custom_methods.find_all") as mock_find_all:
-            mock_find_all.return_value = [{"response": expenses_data}]
+        mock_client = Mock()
+        mock_client.get_group_by_name.return_value = mock_group
+        mock_client.call_mapped_method.return_value = expenses_data
+        mock_client.convert.return_value = expenses_data
 
-            result = await expenses_by_month(mock_client, "Test Group", "2025-10")
+        result = await expenses_by_month(mock_client, "Test Group", "2025-10")
 
-            # Should only return expense from correct group and month
-            assert len(result) == 1
-            assert result[0]["id"] == 1
-            assert result[0]["description"] == "Groceries"
+        # Should only return expense from correct group and month
+        assert len(result) == 1
+        assert result[0]["id"] == 1
+        assert result[0]["description"] == "Groceries"
+
+        # Verify API was called with correct parameters
+        mock_client.call_mapped_method.assert_called_once()
+        call_args = mock_client.call_mapped_method.call_args
+        assert call_args[0][0] == "list_expenses"  # method name
+        assert call_args[1]["group_id"] == 1
 
     @pytest.mark.asyncio
     async def test_expenses_by_month_group_not_found(self):
@@ -77,18 +82,18 @@ class TestExpensesByMonth:
 
     @pytest.mark.asyncio
     async def test_expenses_by_month_no_cached_data(self):
-        """Test when no cached data is available."""
+        """Test when no API data is available."""
         mock_group = Mock()
         mock_group.id = 1
+
         mock_client = Mock()
         mock_client.get_group_by_name.return_value = mock_group
+        mock_client.call_mapped_method.return_value = []
+        mock_client.convert.return_value = []
 
-        with patch("app.custom_methods.find_all") as mock_find_all:
-            mock_find_all.return_value = []
+        result = await expenses_by_month(mock_client, "Test Group", "2025-10")
 
-            result = await expenses_by_month(mock_client, "Test Group", "2025-10")
-
-            assert result == []
+        assert result == []
 
     @pytest.mark.asyncio
     async def test_expenses_by_month_various_date_fields(self):
@@ -113,12 +118,12 @@ class TestExpensesByMonth:
             },
         ]
 
-        with patch("app.custom_methods.find_all") as mock_find_all:
-            mock_find_all.return_value = [{"response": expenses_data}]
+        mock_client.call_mapped_method.return_value = expenses_data
+        mock_client.convert.return_value = expenses_data
 
-            result = await expenses_by_month(mock_client, "Test Group", "2025-10")
+        result = await expenses_by_month(mock_client, "Test Group", "2025-10")
 
-            assert len(result) == 2
+        assert len(result) == 2
 
 
 class TestMonthlyReport:

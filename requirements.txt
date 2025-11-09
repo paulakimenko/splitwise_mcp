@@ -1,6 +1,5 @@
 # Python dependencies for the Splitwise MCP server (Pure MCP SDK)
 mcp[cli]>=1.0.0
-pymongo[srv]>=4.5.0
 splitwise>=3.0.0
 python-dateutil>=2.8.2
 typing-extensions>=4.7.1

@@ -25,10 +25,10 @@ This is a **pure MCP server** (FastMCP) that wraps the Splitwise API for AI agen
 - **Switch**: Set `MCP_TRANSPORT=streamable-http` environment variable
 - **Why**: stdio for local testing, HTTP for ChatGPT integration and remote clients
 
-**4. MongoDB Graceful Degradation**
-- All operations attempt database persistence but **never fail** if MongoDB is unavailable
-- Pattern: `try: insert_document(...) except Exception: logging.warning(...)`
-- Enables testing without MongoDB while maintaining audit trail in production
+**4. Direct API Architecture**
+- All operations call the Splitwise API directly (no database layer)
+- Pattern: `client.call_mapped_method()` → Splitwise SDK → API response
+- Benefits: Simple, stateless, no dependencies, easy to deploy
 
 **5. Method Mapping Bridge**
 ```python

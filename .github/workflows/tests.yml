@@ -7,12 +7,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
-    services:
-      mongodb:
-        image: mongo:6.0
-        ports:
-          - 27017:27017
 
     steps:
     - uses: actions/checkout@v4
@@ -36,7 +30,5 @@ jobs:
     - name: Run unit tests
       env:
         SPLITWISE_API_KEY: "test_key_for_github_actions"
-        MONGO_URI: "mongodb://localhost:27017"
-        DB_NAME: "splitwise_test"
       run: |
         pytest tests/ -v --ignore=tests/integration

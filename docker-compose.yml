@@ -1,21 +1,10 @@
 version: '3.8'
 services:
-  mongo:
-    image: mongo:6.0
-    container_name: splitwise_mongo
-    restart: unless-stopped
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-
   splitwise-mcp:
     # Use build: . for local development, or uncomment image line for pre-built image
     build: .
     # image: paulakimenko/splitwise-mcp:latest
     container_name: splitwise_mcp_server
-    depends_on:
-      - mongo
     # Don't expose port directly - nginx will proxy to it
     # ports:
     #   - "8000:8000"
@@ -23,8 +12,6 @@ services:
       - SPLITWISE_API_KEY=${SPLITWISE_API_KEY}
       - SPLITWISE_CONSUMER_KEY=${SPLITWISE_CONSUMER_KEY}
       - SPLITWISE_CONSUMER_SECRET=${SPLITWISE_CONSUMER_SECRET}
-      - MONGO_URI=mongodb://mongo:27017
-      - DB_NAME=${DB_NAME:-splitwise}
       - MCP_TRANSPORT=streamable-http
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8000
@@ -43,6 +30,3 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     restart: unless-stopped
-
-volumes:
-  mongo_data:

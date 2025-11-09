@@ -26,22 +26,18 @@ docker-push: ## Push Docker image to registry
 
 docker-build-push: docker-build docker-push ## Build and push Docker image
 
-docker-run: ## Run Docker container locally (without database - limited functionality)
+docker-run: ## Run Docker container locally
 	@if [ -f .env ]; then set -o allexport; source .env; set +o allexport; fi && \
 	REGISTRY=$${DOCKER_REGISTRY:-paulakimenko} && \
 	IMAGE_NAME=$${DOCKER_IMAGE_NAME:-splitwise-mcp} && \
 	TAG=$${DOCKER_TAG:-latest} && \
-	echo "⚠️  Running standalone container (no database) - limited functionality" && \
-	echo "💡 Use 'make docker-compose-up' for full functionality with MongoDB" && \
 	echo "Running Docker container: $$REGISTRY/$$IMAGE_NAME:$$TAG" && \
 	docker run --rm -p 8000:8000 --env-file .env $$REGISTRY/$$IMAGE_NAME:$$TAG
 
-docker-run-full: ## Run with docker-compose (recommended - includes MongoDB)
-	@echo "🚀 Starting full stack with MongoDB..." && \
+docker-run-full: ## Run with docker-compose (recommended)
+	@echo "🚀 Starting services with docker-compose..." && \
 	make docker-compose-up && \
-	echo "✅ Service available at http://localhost:8000" && \
-	echo "📚 API docs at http://localhost:8000/docs" && \
-	echo "🔍 Health check: curl http://localhost:8000/health"
+	echo "✅ Service available at http://localhost:8000"
 
 # Docker Compose Commands
 docker-compose-build: ## Build Docker containers
@@ -84,15 +80,15 @@ integration-test: ## Run integration tests (requires SPLITWISE_API_KEY)
 	if [ -z "$$SPLITWISE_API_KEY" ] && [ -z "$$SPLITWISE_CONSUMER_KEY" ]; then echo "Error: Either SPLITWISE_API_KEY or SPLITWISE_CONSUMER_KEY/SPLITWISE_CONSUMER_SECRET must be set"; exit 1; fi && \
 	.venv/bin/python -m pytest tests/integration/ -v --tb=short -s
 
-integration-test-docker: ## Run integration tests with Docker Compose (MongoDB + live API)
-	@echo "Starting MongoDB with Docker Compose..."
-	@docker-compose up -d mongo
-	@echo "Waiting for MongoDB to be ready..."
+integration-test-docker: ## Run integration tests with Docker Compose (live API)
+	@echo "Starting MCP server with Docker Compose..."
+	@docker-compose up -d
+	@echo "Waiting for server to be ready..."
 	@sleep 5
-	@echo "Running integration tests against live Splitwise API with Docker MongoDB..."
+	@echo "Running integration tests against live Splitwise API..."
 	@if [ -f .env ]; then set -o allexport; source .env; set +o allexport; fi && \
 	if [ -z "$$SPLITWISE_API_KEY" ] && [ -z "$$SPLITWISE_CONSUMER_KEY" ]; then echo "Error: Either SPLITWISE_API_KEY or SPLITWISE_CONSUMER_KEY/SPLITWISE_CONSUMER_SECRET must be set"; exit 1; fi && \
-	MONGO_URI=mongodb://localhost:27017 .venv/bin/python -m pytest tests/integration/ -v --tb=short -s
+	.venv/bin/python -m pytest tests/integration/ -v --tb=short -s
 	@echo "Stopping Docker Compose services..."
 	@docker-compose down
 
@@ -173,7 +169,6 @@ dev: env-setup ## Start development server (requires .env file)
 # Docker Development
 docker-dev: docker-compose-up ## Start development environment with Docker
 	@echo "Development environment started. API available at http://localhost:8000"
-	@echo "MongoDB available at mongodb://localhost:27017"
 	@echo "Run 'make docker-compose-logs-tail' to see logs"
 
 docker-dev-stop: docker-compose-down ## Stop development environment

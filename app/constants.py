@@ -15,20 +15,6 @@ ENV_SPLITWISE_API_KEY = "SPLITWISE_API_KEY"
 ENV_SPLITWISE_CONSUMER_KEY = "SPLITWISE_CONSUMER_KEY"
 ENV_SPLITWISE_CONSUMER_SECRET = "SPLITWISE_CONSUMER_SECRET"
 
-# MongoDB Configuration
-ENV_MONGO_URI = "MONGO_URI"
-ENV_DB_NAME = "DB_NAME"
-
-# Caching Configuration
-ENV_CACHE_ENABLED = "CACHE_ENABLED"
-ENV_CACHE_TTL_EXPENSES_MINUTES = "CACHE_TTL_EXPENSES_MINUTES"
-ENV_CACHE_TTL_FRIENDS_MINUTES = "CACHE_TTL_FRIENDS_MINUTES"
-ENV_CACHE_TTL_USERS_MINUTES = "CACHE_TTL_USERS_MINUTES"
-ENV_CACHE_TTL_GROUPS_MINUTES = "CACHE_TTL_GROUPS_MINUTES"
-ENV_CACHE_TTL_CATEGORIES_MINUTES = "CACHE_TTL_CATEGORIES_MINUTES"
-ENV_CACHE_TTL_CURRENCIES_MINUTES = "CACHE_TTL_CURRENCIES_MINUTES"
-ENV_CACHE_TTL_NOTIFICATIONS_MINUTES = "CACHE_TTL_NOTIFICATIONS_MINUTES"
-
 # MCP Transport Configuration
 ENV_MCP_TRANSPORT = "MCP_TRANSPORT"
 ENV_MCP_HOST = "MCP_HOST"
@@ -51,8 +37,6 @@ METHOD_LIST_CURRENCIES = "list_currencies"
 METHOD_GET_EXCHANGE_RATES = "get_exchange_rates"
 METHOD_LIST_NOTIFICATIONS = "list_notifications"
 METHOD_GET_COMMENTS = "get_comments"
-METHOD_GET_BALANCE = "get_balance"
-
 # POST Methods (Write Operations)
 METHOD_CREATE_EXPENSE = "create_expense"
 METHOD_CREATE_GROUP = "create_group"
@@ -71,62 +55,9 @@ METHOD_CREATE_COMMENT = "create_comment"
 METHOD_DELETE_COMMENT = "delete_comment"
 
 # =============================================================================
-# Entity Types (used for caching and collections)
-# =============================================================================
-
-ENTITY_EXPENSES = "expenses"
-ENTITY_FRIENDS = "friends"
-ENTITY_USERS = "users"
-ENTITY_GROUPS = "groups"
-ENTITY_CATEGORIES = "categories"
-ENTITY_CURRENCIES = "currencies"
-ENTITY_NOTIFICATIONS = "notifications"
-
-# =============================================================================
-# Entity Field Names
-# =============================================================================
-
-# Common fields
-FIELD_ID = "id"
-FIELD_TIMESTAMP = "timestamp"
-FIELD_RESPONSE_DATA = "response_data"
-
-# Expense fields
-FIELD_EXPENSE_COST = "cost"
-FIELD_EXPENSE_DESCRIPTION = "description"
-FIELD_EXPENSE_DATE = "date"
-FIELD_EXPENSE_CATEGORY_ID = "category_id"
-FIELD_EXPENSE_GROUP_ID = "group_id"
-FIELD_EXPENSE_CURRENCY_CODE = "currency_code"
-FIELD_EXPENSE_CREATED_AT = "created_at"
-FIELD_EXPENSE_UPDATED_AT = "updated_at"
-
-# Group fields
-FIELD_GROUP_NAME = "name"
-FIELD_GROUP_TYPE = "group_type"
-FIELD_GROUP_MEMBERS = "members"
-
-# User fields
-FIELD_USER_FIRST_NAME = "first_name"
-FIELD_USER_LAST_NAME = "last_name"
-FIELD_USER_EMAIL = "email"
-
-# Comment fields
-FIELD_COMMENT_CONTENT = "content"
-FIELD_COMMENT_EXPENSE_ID = "expense_id"
-
-# Category fields
-FIELD_CATEGORY_NAME = "name"
-
-# =============================================================================
 # Log Operation Types
 # =============================================================================
 
-LOG_OP_TOOL_CALL = "TOOL_CALL"
-LOG_OP_RESOURCE_READ = "RESOURCE_READ"
-LOG_OP_CACHE_HIT = "CACHE_HIT"
-LOG_OP_CACHE_MISS = "CACHE_MISS"
-LOG_OP_CACHE_FALLBACK = "CACHE_FALLBACK"
 LOG_OP_API_ERROR = "API_ERROR"
 
 # =============================================================================
@@ -152,19 +83,6 @@ RESOURCE_COMMENTS_BY_EXPENSE = f"{URI_SCHEME_SPLITWISE}://comments/{{expense_id}
 # =============================================================================
 # Default Values
 # =============================================================================
-
-DEFAULT_MONGO_URI = "mongodb://localhost:27017"
-DEFAULT_DB_NAME = "splitwise"
-DEFAULT_CACHE_ENABLED = "true"
-
-# Default TTL values (in minutes)
-DEFAULT_TTL_EXPENSES = 5
-DEFAULT_TTL_FRIENDS = 5
-DEFAULT_TTL_USERS = 60
-DEFAULT_TTL_GROUPS = 60
-DEFAULT_TTL_CATEGORIES = 1440  # 24 hours
-DEFAULT_TTL_CURRENCIES = 1440  # 24 hours
-DEFAULT_TTL_NOTIFICATIONS = 0  # Never cache
 
 # MCP Transport defaults
 DEFAULT_MCP_TRANSPORT = "stdio"
